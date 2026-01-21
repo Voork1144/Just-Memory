@@ -41,7 +41,7 @@ export interface SearchSession {
 
 export interface StartSearchResult {
   sessionId: string;
-  status: 'running' | 'completed' | 'error';
+  status: 'running' | 'completed' | 'cancelled' | 'error';
   message: string;
 }
 
@@ -62,7 +62,7 @@ export interface GetResultsResult {
 
 export interface StopSearchResult {
   sessionId: string;
-  status: 'cancelled' | 'completed' | 'error';
+  status: 'running' | 'cancelled' | 'completed' | 'error';
   totalResults: number;
   message: string;
 }

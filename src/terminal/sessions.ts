@@ -57,7 +57,7 @@ export function isCommandAllowed(command: string): { allowed: boolean; reason?: 
   
   // Check allowed commands (whitelist mode)
   if (securityConfig.allowedCommands && securityConfig.allowedCommands.length > 0) {
-    const baseCmd = normalizedCmd.split(/\s+/)[0];
+    const baseCmd = normalizedCmd.split(/\s+/)[0] ?? '';
     if (!securityConfig.allowedCommands.includes(baseCmd)) {
       return { allowed: false, reason: `Command not in allowed list: ${baseCmd}` };
     }

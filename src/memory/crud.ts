@@ -185,9 +185,15 @@ export async function updateMemory(
 
 /**
  * Soft delete a memory (D4: recoverable)
+ * If permanent is true, performs hard delete instead
  */
-export function deleteMemory(id: string): boolean {
+export function deleteMemory(id: string, permanent: boolean = false): boolean {
   const db = getDatabase();
+  
+  if (permanent) {
+    const result = db.prepare('DELETE FROM memories WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
   
   const result = db.prepare(`
     UPDATE memories SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL
@@ -223,12 +229,25 @@ export function purgeMemory(id: string): boolean {
 
 /**
  * List deleted memories (for recovery UI)
+ * Can call with (limit) or (projectId, limit)
  */
 export function listDeletedMemories(
-  projectId?: string,
+  limitOrProjectId?: number | string,
   limit: number = 50
 ): Memory[] {
   const db = getDatabase();
+  
+  // Handle overloaded signature
+  let projectId: string | undefined;
+  let actualLimit: number;
+  
+  if (typeof limitOrProjectId === 'number') {
+    actualLimit = limitOrProjectId;
+    projectId = undefined;
+  } else {
+    projectId = limitOrProjectId;
+    actualLimit = limit;
+  }
   
   let query = 'SELECT * FROM memories WHERE deleted_at IS NOT NULL';
   const params: unknown[] = [];
@@ -239,7 +258,7 @@ export function listDeletedMemories(
   }
   
   query += ' ORDER BY deleted_at DESC LIMIT ?';
-  params.push(limit);
+  params.push(actualLimit);
   
   const rows = db.prepare(query).all(...params) as MemoryRow[];
   return rows.map(rowToMemory);
@@ -247,17 +266,39 @@ export function listDeletedMemories(
 
 /**
  * List recent memories
+ * Can call with (options) object or (limit, offset, type, projectId) args
  */
 export function listRecentMemories(
-  options: {
+  limitOrOptions?: number | {
     projectId?: string;
     type?: MemoryType;
     limit?: number;
     offset?: number;
-  } = {}
+  },
+  offsetArg?: number,
+  typeArg?: MemoryType,
+  projectIdArg?: string
 ): Memory[] {
   const db = getDatabase();
-  const { projectId, type, limit = 20, offset = 0 } = options;
+  
+  // Handle overloaded signature
+  let projectId: string | undefined;
+  let type: MemoryType | undefined;
+  let limit: number;
+  let offset: number;
+  
+  if (typeof limitOrOptions === 'number') {
+    limit = limitOrOptions;
+    offset = offsetArg ?? 0;
+    type = typeArg;
+    projectId = projectIdArg;
+  } else {
+    const options = limitOrOptions ?? {};
+    projectId = options.projectId;
+    type = options.type;
+    limit = options.limit ?? 20;
+    offset = options.offset ?? 0;
+  }
   
   let query = 'SELECT * FROM memories WHERE deleted_at IS NULL';
   const params: unknown[] = [];

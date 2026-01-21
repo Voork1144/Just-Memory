@@ -149,14 +149,14 @@ export async function generateEmbeddings(texts: string[]): Promise<Float32Array[
     const batch = texts.slice(i, i + batchSize);
     const truncated = batch.map(t => t.slice(0, EMBEDDING_CONFIG.maxLength * 4));
     
-    const outputs = await embeddingPipeline(truncated, {
+    const outputs = await (embeddingPipeline as any)(truncated, {
       pooling: 'mean',
       normalize: true,
-    });
+    }) as { data: Float32Array };
     
     // Handle single vs batch output
     if (batch.length === 1) {
-      results.push(outputs.data as Float32Array);
+      results.push(outputs.data);
     } else {
       // Batch output is a 2D array
       for (let j = 0; j < batch.length; j++) {

@@ -827,10 +827,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   
   try {
     const result = await handleToolCall(name, args ?? {});
+    // Ensure text is always a string (JSON.stringify(undefined) returns undefined, not "undefined")
+    let textResult: string;
+    if (typeof result === 'string') {
+      textResult = result;
+    } else if (result === undefined || result === null) {
+      textResult = 'null';
+    } else {
+      textResult = JSON.stringify(result, null, 2);
+    }
     return {
       content: [{
         type: 'text',
-        text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+        text: textResult,
       }],
     };
   } catch (error) {

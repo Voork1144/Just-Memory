@@ -60,8 +60,8 @@ export async function writeFile(options: WriteFileOptions): Promise<WriteFileRes
   const flag = mode === 'append' ? 'a' : 'w';
   await fs.promises.writeFile(normalizedPath, content, { flag, encoding: 'utf-8' });
   
-  // Get resulting file stats
-  const stats = await fs.promises.stat(normalizedPath);
+  // Validate file was written by checking stats
+  await fs.promises.stat(normalizedPath);
   
   return {
     success: true,
@@ -167,12 +167,14 @@ function countOccurrences(text: string, search: string): number {
  */
 function findSimilarText(content: string, search: string): string | null {
   // Try to find first line of search text
-  const firstLine = search.split('\n')[0].trim();
+  const searchLines = search.split('\n');
+  const firstLine = searchLines[0]?.trim() ?? '';
   if (firstLine.length < 5) return null;
   
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(firstLine.slice(0, Math.min(20, firstLine.length)))) {
+    const line = lines[i];
+    if (line && line.includes(firstLine.slice(0, Math.min(20, firstLine.length)))) {
       // Return context around this line
       const start = Math.max(0, i - 2);
       const end = Math.min(lines.length, i + 5);
@@ -188,12 +190,13 @@ function findSimilarText(content: string, search: string): string | null {
  */
 function generateEditPreview(content: string, newText: string): string {
   const lines = content.split('\n');
-  const newTextFirstLine = newText.split('\n')[0];
+  const newTextFirstLine = newText.split('\n')[0] ?? '';
   
   // Find the line containing the new text
   let editLineIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(newTextFirstLine)) {
+    const line = lines[i];
+    if (line && newTextFirstLine && line.includes(newTextFirstLine)) {
       editLineIndex = i;
       break;
     }

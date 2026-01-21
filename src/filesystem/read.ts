@@ -6,7 +6,7 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
+// path import removed - unused
 import { 
   ReadFileOptions, 
   ReadFileResult,

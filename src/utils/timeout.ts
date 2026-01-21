@@ -49,26 +49,39 @@ export function getEffectiveTimeout(requested: number): number {
 /**
  * Create a timeout-protected promise wrapper
  * 
- * @param promise - The promise to wrap
+ * @param promiseOrFn - The promise or async function to wrap
  * @param timeoutMs - Timeout in milliseconds
  * @param operation - Description for error messages
  * @returns Promise that rejects if timeout exceeded
  * 
  * @example
+ * // With a promise
  * const result = await withTimeout(
  *   fetch('https://api.example.com'),
  *   5000,
  *   'API request'
  * );
  * 
+ * // With a function (thunk)
+ * const result = await withTimeout(
+ *   () => someAsyncOperation(),
+ *   5000,
+ *   'Operation'
+ * );
+ * 
  * @throws {TimeoutError} If the operation exceeds the timeout
  */
 export async function withTimeout<T>(
-  promise: Promise<T>,
+  promiseOrFn: Promise<T> | (() => T | Promise<T>),
   timeoutMs: number,
   operation: string = 'Operation'
 ): Promise<T> {
   const effectiveTimeout = getEffectiveTimeout(timeoutMs);
+  
+  // Convert function to promise if needed
+  const promise: Promise<T> = typeof promiseOrFn === 'function' 
+    ? Promise.resolve().then(() => promiseOrFn())
+    : promiseOrFn;
   
   // FIX: Use settled flag to prevent memory leaks and ensure cleanup
   let timeoutId: NodeJS.Timeout | undefined;

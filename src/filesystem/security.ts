@@ -11,7 +11,7 @@ import {
   SecurityConfig,
   DEFAULT_SECURITY_CONFIG,
   FilesystemError,
-  FilesystemErrorCode,
+  // FilesystemErrorCode removed - unused
 } from './types.js';
 
 // Global security config (can be overridden)
@@ -97,7 +97,7 @@ export function isPathBlocked(inputPath: string): boolean {
  */
 export function validatePath(
   inputPath: string,
-  operation: 'read' | 'write' | 'delete' | 'list'
+  _operation: 'read' | 'write' | 'delete' | 'list'
 ): FilesystemError | null {
   try {
     // Empty path check

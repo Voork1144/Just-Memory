@@ -199,7 +199,7 @@ export function verifyDatabaseConfig(db: Database.Database): {
  * Wrapper for transactions with automatic retry on SQLITE_BUSY
  */
 export async function withRetry<T>(
-  db: Database.Database,
+  _db: Database.Database,
   operation: () => T,
   maxRetries: number = 3,
   delayMs: number = 100

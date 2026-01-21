@@ -3,7 +3,7 @@
  * Fast async search using @vscode/ripgrep
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import { rgPath } from '@vscode/ripgrep';
 import type { SearchOptions, SearchMatch, SearchSession } from './types.js';
 

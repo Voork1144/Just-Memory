@@ -9,7 +9,6 @@
  * - force_terminate: Kill process
  */
 
-import * as path from 'path';
 import {
   StartProcessOptions,
   StartProcessResult,

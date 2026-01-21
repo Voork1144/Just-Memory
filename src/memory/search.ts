@@ -34,6 +34,8 @@ export interface SearchOptions {
   mode?: 'hybrid' | 'bm25' | 'vector';
   /** Weight for BM25 in hybrid mode (0-1, default 0.5) */
   bm25Weight?: number;
+  /** Include soft-deleted memories in results */
+  includeDeleted?: boolean;
 }
 
 /**
@@ -145,7 +147,6 @@ async function searchVector(
   options: { projectId: string | undefined; type: MemoryType | undefined; limit: number }
 ): Promise<SearchResult[]> {
   const db = getDatabase();
-  const { projectId, type, limit } = options;
 
   // Generate query embedding
   const queryEmbedding = await generateEmbedding(query);
