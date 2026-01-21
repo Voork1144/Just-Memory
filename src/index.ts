@@ -23,6 +23,7 @@ import {
   closeDatabase,
   getDatabaseStats,
   initEmbeddings,
+  generateEmbedding,
   storeMemory,
   recallMemory,
   updateMemory,
@@ -750,9 +751,16 @@ async function main(): Promise<void> {
   await initDatabase();
   
   console.error('[just-command] Initializing embeddings model...');
-  initEmbeddings().catch((err) => {
+  try {
+    await initEmbeddings();
+    // Pre-warm the model with a dummy embedding to avoid cold start on first search
+    console.error('[just-command] Pre-warming embeddings model...');
+    await generateEmbedding('warmup');
+    console.error('[just-command] Embeddings model ready');
+  } catch (err) {
     console.error('[just-command] Warning: Embeddings init failed:', err);
-  });
+    console.error('[just-command] Memory search will use BM25 fallback only');
+  }
   
   console.error('[just-command] Starting MCP server (23 tools)...');
   const transport = new StdioServerTransport();

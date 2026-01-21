@@ -13,7 +13,10 @@
     "build:watch": "tsc --watch",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "node --test",
+    "test": "npm run build && tsx --test tests/**/*.test.ts",
+    "test:memory": "npm run build && tsx --test tests/memory/*.test.ts",
+    "test:filesystem": "npm run build && tsx --test tests/filesystem/*.test.ts",
+    "test:quick": "tsx --test tests/**/*.test.ts",
     "test:deps": "node -e \"console.log('Dependencies loaded successfully')\"",
     "lint": "eslint src/",
     "clean": "rimraf dist"
