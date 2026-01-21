@@ -33,8 +33,16 @@ import {
   listRecentMemories,
   listDeletedMemories,
   searchMemories,
+  backupDatabase,
+  restoreDatabase,
+  listBackups,
+  linkMemory,
+  createEntity,
+  refreshContext,
   type MemoryInput,
   type MemoryType,
+  type MemoryLinkInput,
+  type EntityInput,
 } from './memory/index.js';
 
 // Filesystem module imports
@@ -67,7 +75,7 @@ import {
 } from './search/index.js';
 
 // P0 utilities
-import { withTimeout, isClaudeDesktopMode } from './utils/index.js';
+import { withTimeout, isClaudeDesktopMode, getConfig } from './utils/index.js';
 
 // ============================================================================
 // Memory Tool Schemas (Zod validation)
@@ -133,6 +141,42 @@ const MemoryExportSchema = z.object({
   projectId: z.string().optional(),
   includeDeleted: z.boolean().optional().default(false),
 });
+
+// New memory tool schemas (completing 31-tool spec)
+const MemoryBackupSchema = z.object({
+  description: z.string().optional().describe('Optional description for the backup'),
+});
+
+const MemoryRestoreSchema = z.object({
+  backupPath: z.string().describe('Full path to the backup file'),
+});
+
+const MemoryListBackupsSchema = z.object({
+  limit: z.number().min(1).max(50).optional().default(20),
+});
+
+const MemoryLinkSchema = z.object({
+  memoryId: z.string().describe('The memory ID to link'),
+  filePath: z.string().optional().describe('File path to associate'),
+  commitHash: z.string().optional().describe('Git commit hash to associate'),
+  url: z.string().optional().describe('URL to associate'),
+});
+
+const MemoryRefreshContextSchema = z.object({
+  projectId: z.string().optional(),
+  maxTokens: z.number().min(100).max(1000).optional().default(300),
+});
+
+const MemoryEntityCreateSchema = z.object({
+  name: z.string().describe('Entity name'),
+  type: z.string().describe('Entity type (e.g., person, project, concept)'),
+  description: z.string().optional(),
+  properties: z.record(z.unknown()).optional(),
+  projectId: z.string().optional(),
+});
+
+// Utility tool schemas
+const GetConfigSchema = z.object({});
 
 // ============================================================================
 // Filesystem Tool Schemas
@@ -371,6 +415,77 @@ const MEMORY_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: 'memory_backup',
+    description: 'Create a backup of the memory database. Returns backup info.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        description: { type: 'string', description: 'Optional description for the backup' },
+      },
+    },
+  },
+  {
+    name: 'memory_restore',
+    description: 'Restore memory database from a backup file. Use with caution.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        backupPath: { type: 'string', description: 'Full path to the backup file' },
+      },
+      required: ['backupPath'],
+    },
+  },
+  {
+    name: 'memory_list_backups',
+    description: 'List available memory database backups.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', minimum: 1, maximum: 50, description: 'Max backups to list' },
+      },
+    },
+  },
+  {
+    name: 'memory_link',
+    description: 'Associate a memory with a file, git commit, or URL for reference tracking.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        memoryId: { type: 'string', description: 'Memory ID to link' },
+        filePath: { type: 'string', description: 'File path to associate' },
+        commitHash: { type: 'string', description: 'Git commit hash' },
+        url: { type: 'string', description: 'URL to associate' },
+      },
+      required: ['memoryId'],
+    },
+  },
+  {
+    name: 'memory_refresh_context',
+    description: 'Regenerate and return current session context. Use mid-session when context feels stale.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        maxTokens: { type: 'number', minimum: 100, maximum: 1000 },
+      },
+    },
+  },
+  {
+    name: 'memory_entity_create',
+    description: 'Create a knowledge graph entity for organizing related memories.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Entity name' },
+        type: { type: 'string', description: 'Entity type (person, project, concept, etc.)' },
+        description: { type: 'string' },
+        properties: { type: 'object', description: 'Additional properties' },
+        projectId: { type: 'string' },
+      },
+      required: ['name', 'type'],
+    },
+  },
 ];
 
 // ============================================================================
@@ -599,8 +714,20 @@ const SEARCH_TOOLS: Tool[] = [
   },
 ];
 
+// ============================================================================
+// Utility Tool Definitions
+// ============================================================================
+
+const UTILITY_TOOLS: Tool[] = [
+  {
+    name: 'get_config',
+    description: 'Get current server configuration including version, timeout settings, and module status.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+];
+
 // Combine all tools
-const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOOLS, ...SEARCH_TOOLS];
+const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOOLS, ...SEARCH_TOOLS, ...UTILITY_TOOLS];
 
 
 
@@ -738,6 +865,38 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
     case 'stop_search': {
       const { sessionId } = StopSearchSchema.parse(args);
       return withTimeout(() => stopSearchTool(sessionId), timeoutMs, 'stop_search');
+    }
+    
+    // New memory tools (completing 31-tool spec)
+    case 'memory_backup': {
+      const { description } = MemoryBackupSchema.parse(args);
+      return withTimeout(() => backupDatabase(description), timeoutMs, 'memory_backup');
+    }
+    case 'memory_restore': {
+      const { backupPath } = MemoryRestoreSchema.parse(args);
+      return withTimeout(() => restoreDatabase(backupPath), timeoutMs, 'memory_restore');
+    }
+    case 'memory_list_backups': {
+      const { limit } = MemoryListBackupsSchema.parse(args);
+      return withTimeout(() => listBackups(limit), timeoutMs, 'memory_list_backups');
+    }
+    case 'memory_link': {
+      const input = MemoryLinkSchema.parse(args);
+      return withTimeout(() => linkMemory(input as MemoryLinkInput), timeoutMs, 'memory_link');
+    }
+    case 'memory_refresh_context': {
+      const { projectId, maxTokens } = MemoryRefreshContextSchema.parse(args);
+      return withTimeout(() => refreshContext(projectId, maxTokens), timeoutMs, 'memory_refresh_context');
+    }
+    case 'memory_entity_create': {
+      const input = MemoryEntityCreateSchema.parse(args);
+      return withTimeout(() => createEntity(input as EntityInput), timeoutMs, 'memory_entity_create');
+    }
+    
+    // Utility tools
+    case 'get_config': {
+      GetConfigSchema.parse(args);
+      return withTimeout(() => getConfig(), timeoutMs, 'get_config');
     }
     
     default:

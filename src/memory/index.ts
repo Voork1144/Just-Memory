@@ -11,8 +11,13 @@ export {
   closeDatabase,
   getDefaultDbPath,
   getDatabaseStats,
+  getBackupDir,
+  backupDatabase,
+  restoreDatabase,
+  listBackups,
   type DatabaseConfig,
   type DatabaseStats,
+  type BackupInfo,
 } from './database.js';
 
 // Schema
@@ -41,9 +46,20 @@ export {
   purgeMemory,
   listDeletedMemories,
   listRecentMemories,
+  linkMemory,
+  getMemoryLinks,
+  createEntity,
+  getEntity,
+  listEntities,
+  refreshContext,
   type MemoryInput,
   type Memory,
   type MemoryType,
+  type MemoryLinkInput,
+  type MemoryLink,
+  type EntityInput,
+  type Entity,
+  type RefreshContextResult,
 } from './crud.js';
 
 // Search

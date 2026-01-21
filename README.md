@@ -14,6 +14,9 @@
 - Soft delete with recovery
 - Project-scoped memories
 - Importance scoring and decay
+- Database backup and restore
+- Knowledge Graph entities (v1 basic)
+- File/commit/URL linking
 
 ### 📁 Filesystem Operations
 - Read/write files with pagination and encoding support
@@ -71,7 +74,7 @@ Restart Claude Desktop after configuration.
 
 ## Tools Reference
 
-### Memory Tools (10)
+### Memory Tools (17)
 
 | Tool | Description |
 |------|-------------|
@@ -85,6 +88,12 @@ Restart Claude Desktop after configuration.
 | `memory_stats` | Get database statistics |
 | `memory_briefing` | Generate session briefing (~300 tokens) |
 | `memory_export` | Export memories as JSON or Markdown |
+| `memory_backup` | Create timestamped database backup |
+| `memory_restore` | Restore database from backup file |
+| `memory_list_backups` | List available backup files |
+| `memory_link` | Associate memory with file/commit/URL |
+| `memory_refresh_context` | Regenerate mid-session context |
+| `memory_entity_create` | Create knowledge graph entity |
 
 ### Filesystem Tools (8)
 
@@ -116,6 +125,12 @@ Restart Claude Desktop after configuration.
 | `start_search` | Start async ripgrep search |
 | `get_search_results` | Get paginated search results |
 | `stop_search` | Cancel running search |
+
+### Utility Tools (1)
+
+| Tool | Description |
+|------|-------------|
+| `get_config` | Get server configuration and status |
 
 ## Usage Examples
 

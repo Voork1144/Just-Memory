@@ -186,3 +186,124 @@ export function getDatabaseStats(): DatabaseStats {
     dbSizeBytes,
   };
 }
+
+
+// =============================================================================
+// Backup/Restore Functions
+// =============================================================================
+
+/**
+ * Backup info
+ */
+export interface BackupInfo {
+  filename: string;
+  path: string;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+/**
+ * Get backup directory path
+ */
+export function getBackupDir(): string {
+  const home = process.env.HOME || process.env.USERPROFILE || '.';
+  const dir = path.join(home, '.just-command', 'backups');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+/**
+ * Create a backup of the database
+ */
+export function backupDatabase(description?: string): BackupInfo {
+  const db = getDatabase();
+  const backupDir = getBackupDir();
+  
+  // Generate timestamped filename
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const suffix = description ? `_${description.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 30)}` : '';
+  const filename = `memory_backup_${timestamp}${suffix}.db`;
+  const backupPath = path.join(backupDir, filename);
+  
+  // Use SQLite's backup API for safe copy
+  db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
+  
+  const stats = fs.statSync(backupPath);
+  
+  return {
+    filename,
+    path: backupPath,
+    createdAt: new Date().toISOString(),
+    sizeBytes: stats.size,
+  };
+}
+
+/**
+ * List available backups
+ */
+export function listBackups(limit: number = 20): BackupInfo[] {
+  const backupDir = getBackupDir();
+  
+  const files = fs.readdirSync(backupDir)
+    .filter(f => f.endsWith('.db') && f.startsWith('memory_backup_'))
+    .map(filename => {
+      const filePath = path.join(backupDir, filename);
+      const stats = fs.statSync(filePath);
+      return {
+        filename,
+        path: filePath,
+        createdAt: stats.mtime.toISOString(),
+        sizeBytes: stats.size,
+      };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+  
+  return files;
+}
+
+/**
+ * Restore database from backup
+ */
+export function restoreDatabase(backupPath: string): { success: boolean; memoriesRestored: number } {
+  if (!fs.existsSync(backupPath)) {
+    throw new Error(`Backup file not found: ${backupPath}`);
+  }
+  
+  // Close current connection
+  closeDatabase();
+  
+  const dbPath = getDefaultDbPath();
+  
+  // Create backup of current DB before restore
+  const currentBackup = dbPath + '.pre-restore';
+  if (fs.existsSync(dbPath)) {
+    fs.copyFileSync(dbPath, currentBackup);
+  }
+  
+  try {
+    // Copy backup to main location
+    fs.copyFileSync(backupPath, dbPath);
+    
+    // Reinitialize and count memories
+    const db = initDatabase();
+    const row = db.prepare('SELECT COUNT(*) as count FROM memories WHERE deleted_at IS NULL').get() as { count: number };
+    
+    // Clean up pre-restore backup on success
+    if (fs.existsSync(currentBackup)) {
+      fs.unlinkSync(currentBackup);
+    }
+    
+    return { success: true, memoriesRestored: row.count };
+  } catch (error) {
+    // Restore original on failure
+    if (fs.existsSync(currentBackup)) {
+      fs.copyFileSync(currentBackup, dbPath);
+      fs.unlinkSync(currentBackup);
+    }
+    initDatabase(); // Reinitialize with original
+    throw error;
+  }
+}

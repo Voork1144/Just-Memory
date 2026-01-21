@@ -10,6 +10,14 @@ import {
   generateEmbedding, 
   embeddingToBuffer,
 } from './embeddings.js';
+import * as crypto from 'crypto';
+
+/**
+ * Generate a unique ID (hex string)
+ */
+function generateId(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 /**
  * Memory types
@@ -358,5 +366,316 @@ function rowToMemory(row: MemoryRow): Memory {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+  };
+}
+
+
+// =============================================================================
+// Memory Link Functions
+// =============================================================================
+
+/**
+ * Link input
+ */
+export interface MemoryLinkInput {
+  memoryId: string;
+  filePath?: string;
+  commitHash?: string;
+  url?: string;
+}
+
+/**
+ * Link result
+ */
+export interface MemoryLink {
+  id: string;
+  memoryId: string;
+  filePath: string | null;
+  commitHash: string | null;
+  url: string | null;
+  createdAt: string;
+}
+
+/**
+ * Link a memory to a file, commit, or URL
+ */
+export function linkMemory(input: MemoryLinkInput): MemoryLink {
+  const db = getDatabase();
+  
+  // Verify memory exists
+  const memory = db.prepare('SELECT id FROM memories WHERE id = ?').get(input.memoryId);
+  if (!memory) {
+    throw new Error(`Memory not found: ${input.memoryId}`);
+  }
+  
+  if (!input.filePath && !input.commitHash && !input.url) {
+    throw new Error('At least one of filePath, commitHash, or url must be provided');
+  }
+  
+  const id = generateId();
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  
+  db.prepare(`
+    INSERT INTO file_associations (id, memory_id, file_path, commit_hash, url, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, input.memoryId, input.filePath || null, input.commitHash || null, input.url || null, now);
+  
+  return {
+    id,
+    memoryId: input.memoryId,
+    filePath: input.filePath || null,
+    commitHash: input.commitHash || null,
+    url: input.url || null,
+    createdAt: now,
+  };
+}
+
+/**
+ * Get links for a memory
+ */
+export function getMemoryLinks(memoryId: string): MemoryLink[] {
+  const db = getDatabase();
+  
+  const rows = db.prepare(`
+    SELECT id, memory_id, file_path, commit_hash, url, created_at
+    FROM file_associations
+    WHERE memory_id = ?
+    ORDER BY created_at DESC
+  `).all(memoryId) as Array<{
+    id: string;
+    memory_id: string;
+    file_path: string | null;
+    commit_hash: string | null;
+    url: string | null;
+    created_at: string;
+  }>;
+  
+  return rows.map(row => ({
+    id: row.id,
+    memoryId: row.memory_id,
+    filePath: row.file_path,
+    commitHash: row.commit_hash,
+    url: row.url,
+    createdAt: row.created_at,
+  }));
+}
+
+// =============================================================================
+// Knowledge Graph Entity Functions (Basic v1)
+// =============================================================================
+
+/**
+ * Entity input
+ */
+export interface EntityInput {
+  name: string;
+  type: string;
+  description?: string;
+  properties?: Record<string, unknown>;
+  projectId?: string;
+}
+
+/**
+ * Entity record
+ */
+export interface Entity {
+  id: string;
+  name: string;
+  type: string;
+  description: string | null;
+  properties: Record<string, unknown>;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+/**
+ * Create a knowledge graph entity
+ */
+export function createEntity(input: EntityInput): Entity {
+  const db = getDatabase();
+  
+  const id = generateId();
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  
+  db.prepare(`
+    INSERT INTO entities (id, name, type, description, properties, project_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    input.name,
+    input.type,
+    input.description || null,
+    JSON.stringify(input.properties || {}),
+    input.projectId || null,
+    now,
+    now
+  );
+  
+  return {
+    id,
+    name: input.name,
+    type: input.type,
+    description: input.description || null,
+    properties: input.properties || {},
+    projectId: input.projectId || null,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+}
+
+/**
+ * Get entity by ID
+ */
+export function getEntity(id: string): Entity | null {
+  const db = getDatabase();
+  
+  const row = db.prepare(`
+    SELECT id, name, type, description, properties, project_id, created_at, updated_at, deleted_at
+    FROM entities
+    WHERE id = ? AND deleted_at IS NULL
+  `).get(id) as {
+    id: string;
+    name: string;
+    type: string;
+    description: string | null;
+    properties: string;
+    project_id: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  } | undefined;
+  
+  if (!row) return null;
+  
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    description: row.description,
+    properties: JSON.parse(row.properties) as Record<string, unknown>,
+    projectId: row.project_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+/**
+ * List entities
+ */
+export function listEntities(
+  limit: number = 20,
+  type?: string,
+  projectId?: string
+): Entity[] {
+  const db = getDatabase();
+  
+  let query = 'SELECT * FROM entities WHERE deleted_at IS NULL';
+  const params: unknown[] = [];
+  
+  if (type) {
+    query += ' AND type = ?';
+    params.push(type);
+  }
+  
+  if (projectId) {
+    query += ' AND project_id = ?';
+    params.push(projectId);
+  }
+  
+  query += ' ORDER BY created_at DESC LIMIT ?';
+  params.push(limit);
+  
+  const rows = db.prepare(query).all(...params) as Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string | null;
+    properties: string;
+    project_id: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>;
+  
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    description: row.description,
+    properties: JSON.parse(row.properties) as Record<string, unknown>,
+    projectId: row.project_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  }));
+}
+
+// =============================================================================
+// Context Refresh Function
+// =============================================================================
+
+/**
+ * Refresh context result
+ */
+export interface RefreshContextResult {
+  totalMemories: number;
+  recentMemories: number;
+  highPriorityCount: number;
+  suggestedContext: string;
+}
+
+/**
+ * Refresh and regenerate session context
+ */
+export function refreshContext(projectId?: string, maxTokens: number = 300): RefreshContextResult {
+  const db = getDatabase();
+  
+  // Get counts
+  let countQuery = 'SELECT COUNT(*) as total FROM memories WHERE deleted_at IS NULL';
+  const params: unknown[] = [];
+  
+  if (projectId) {
+    countQuery += ' AND project_id = ?';
+    params.push(projectId);
+  }
+  
+  const countRow = db.prepare(countQuery).get(...params) as { total: number };
+  const totalMemories = countRow.total;
+  
+  // Get high priority memories (importance >= 0.7)
+  let highPriorityQuery = `
+    SELECT COUNT(*) as count FROM memories 
+    WHERE deleted_at IS NULL AND importance >= 0.7
+  `;
+  if (projectId) {
+    highPriorityQuery += ' AND project_id = ?';
+  }
+  const highPriorityRow = db.prepare(highPriorityQuery).get(...(projectId ? [projectId] : [])) as { count: number };
+  
+  // Get recent memories for context
+  const recentMemories = listRecentMemories(15, 0, undefined, projectId);
+  
+  // Build context string
+  const charLimit = maxTokens * 4;
+  let context = '';
+  
+  // Add high-importance memories first
+  const sorted = recentMemories.sort((a, b) => b.importance - a.importance);
+  
+  for (const mem of sorted) {
+    const line = `[${mem.type}] ${mem.content.slice(0, 150)}${mem.content.length > 150 ? '...' : ''}\n`;
+    if (context.length + line.length > charLimit) break;
+    context += line;
+  }
+  
+  return {
+    totalMemories,
+    recentMemories: recentMemories.length,
+    highPriorityCount: highPriorityRow.count,
+    suggestedContext: context.trim(),
   };
 }

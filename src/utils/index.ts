@@ -64,3 +64,10 @@ export {
   withRetry,
   type SqliteConfig
 } from './sqlite-config.js';
+
+
+// Server configuration
+export {
+  getConfig,
+  type ServerConfig
+} from './config.js';
