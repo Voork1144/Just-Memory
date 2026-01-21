@@ -14,7 +14,7 @@ export {
   withTimeout,
   TimeoutError,
   getTimeoutConfig
-} from './timeout';
+} from './timeout.js';
 
 // P0 Fix #2: Response size limit (Bug #2)
 export {
@@ -26,7 +26,7 @@ export {
   enforceResponseLimit,
   formatFileResponse,
   type SizeLimitedResponse
-} from './response-limit';
+} from './response-limit.js';
 
 // P0 Fix #3: File encoding support (Bug #7)
 export {
@@ -37,9 +37,9 @@ export {
   getExtension,
   suggestEncoding,
   readFileWithEncoding,
-  appearsToBeBinary,  // FIX: Corrected function name (was appearsToeBinary)
+  appearsToBeBinary,
   type EncodedFileResult
-} from './file-encoding';
+} from './file-encoding.js';
 
 // P0 Fix #4: Unicode sanitization (Bug #8)
 export {
@@ -49,17 +49,18 @@ export {
   sanitizeObjectForJson,
   escapeForDisplay,
   type SanitizeOptions
-} from './sanitize';
+} from './sanitize.js';
 
 // P0 Fix #5: SQLite WAL mode (Bug #11)
 export {
   DEFAULT_BUSY_TIMEOUT,
   DEFAULT_CACHE_SIZE,
   initializeDatabase,
+  configureSQLite,
   getDatabaseConfig,
   checkpoint,
   closeDatabase,
   verifyDatabaseConfig,
   withRetry,
   type SqliteConfig
-} from './sqlite-config';
+} from './sqlite-config.js';

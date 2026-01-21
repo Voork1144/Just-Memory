@@ -77,6 +77,20 @@ export function initializeDatabase(config: SqliteConfig): Database.Database {
 }
 
 /**
+ * Configure an existing database with safe PRAGMA settings
+ * Used when the database is created elsewhere (e.g., by another library)
+ * 
+ * @param db - Existing database instance
+ * @param _dbPath - Database path (for logging, not used for operations)
+ */
+export function configureSQLite(
+  db: Database.Database, 
+  _dbPath: string
+): void {
+  applyPragmas(db, DEFAULT_CONFIG);
+}
+
+/**
  * Apply PRAGMA settings for safe operation
  */
 function applyPragmas(
@@ -85,7 +99,7 @@ function applyPragmas(
 ): void {
   // CRITICAL: WAL mode for concurrent access safety
   if (opts.walMode) {
-    const result = db.pragma('journal_mode = WAL');
+    const result = db.pragma('journal_mode = WAL') as Array<{ journal_mode: string }>;
     if (result[0]?.journal_mode !== 'wal') {
       console.warn('[SQLite] Failed to enable WAL mode');
     }
