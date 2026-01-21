@@ -1,11 +1,12 @@
 /**
  * Just-Command MCP Server
  * 
- * A unified MCP server combining persistent memory, filesystem, and terminal capabilities.
- * Implements 23 tools for Claude Desktop/Claude.ai integration:
+ * A unified MCP server combining persistent memory, filesystem, terminal, and search capabilities.
+ * Implements 26 tools for Claude Desktop/Claude.ai integration:
  * - Memory Module: 10 tools
  * - Filesystem Module: 8 tools
  * - Terminal Module: 5 tools
+ * - Search Module: 3 tools
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -56,6 +57,14 @@ import {
   listSessions,
   forceTerminate,
 } from './terminal/index.js';
+
+// Search module imports
+import {
+  startSearchTool,
+  getSearchResultsTool,
+  stopSearchTool,
+  type SearchOptions,
+} from './search/index.js';
 
 // P0 utilities
 import { withTimeout, isClaudeDesktopMode } from './utils/index.js';
@@ -209,6 +218,32 @@ const ForceTerminateSchema = z.object({
   signal: z.enum(['SIGTERM', 'SIGKILL']).optional().describe('Signal to send'),
 });
 
+// ============================================================================
+// Search Tool Schemas
+// ============================================================================
+
+const StartSearchSchema = z.object({
+  path: z.string().describe('Directory path to search in'),
+  pattern: z.string().describe('Search pattern (regex for content, glob for files)'),
+  searchType: z.enum(['content', 'files']).optional().describe('Search type (default: content)'),
+  filePattern: z.string().optional().describe('Glob pattern to filter files (e.g., "*.ts")'),
+  ignoreCase: z.boolean().optional().describe('Case insensitive search (default: true)'),
+  includeHidden: z.boolean().optional().describe('Include hidden files'),
+  maxResults: z.number().min(1).max(10000).optional().describe('Max results (default: 1000)'),
+  contextLines: z.number().min(0).max(10).optional().describe('Lines of context around matches'),
+  literalSearch: z.boolean().optional().describe('Treat pattern as literal string'),
+  timeout: z.number().min(1000).max(60000).optional().describe('Search timeout in ms'),
+});
+
+const GetSearchResultsSchema = z.object({
+  sessionId: z.string().describe('Search session ID'),
+  offset: z.number().min(0).optional().describe('Result offset (default: 0)'),
+  limit: z.number().min(1).max(100).optional().describe('Results per page (default: 50)'),
+});
+
+const StopSearchSchema = z.object({
+  sessionId: z.string().describe('Search session ID to stop'),
+});
 
 
 // ============================================================================
@@ -513,8 +548,59 @@ const TERMINAL_TOOLS: Tool[] = [
   },
 ];
 
+// ============================================================================
+// Search Tool Definitions
+// ============================================================================
+
+const SEARCH_TOOLS: Tool[] = [
+  {
+    name: 'start_search',
+    description: 'Start an async ripgrep-powered search. Returns a session ID for retrieving results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Directory to search in' },
+        pattern: { type: 'string', description: 'Search pattern' },
+        searchType: { type: 'string', enum: ['content', 'files'], description: 'Search type (default: content)' },
+        filePattern: { type: 'string', description: 'File glob filter (e.g., "*.ts")' },
+        ignoreCase: { type: 'boolean', description: 'Case insensitive (default: true)' },
+        includeHidden: { type: 'boolean' },
+        maxResults: { type: 'number', minimum: 1, maximum: 10000 },
+        contextLines: { type: 'number', minimum: 0, maximum: 10 },
+        literalSearch: { type: 'boolean', description: 'Treat as literal string' },
+        timeout: { type: 'number', minimum: 1000, maximum: 60000 },
+      },
+      required: ['path', 'pattern'],
+    },
+  },
+  {
+    name: 'get_search_results',
+    description: 'Get paginated results from a search session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', description: 'Search session ID' },
+        offset: { type: 'number', minimum: 0, description: 'Result offset' },
+        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Results per page' },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'stop_search',
+    description: 'Cancel a running search session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', description: 'Session ID to cancel' },
+      },
+      required: ['sessionId'],
+    },
+  },
+];
+
 // Combine all tools
-const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOOLS];
+const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOOLS, ...SEARCH_TOOLS];
 
 
 
@@ -640,6 +726,20 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
       return withTimeout(() => forceTerminate(input), timeoutMs, 'force_terminate');
     }
     
+    // Search tools
+    case 'start_search': {
+      const input = StartSearchSchema.parse(args);
+      return withTimeout(() => startSearchTool(input as SearchOptions), timeoutMs, 'start_search');
+    }
+    case 'get_search_results': {
+      const input = GetSearchResultsSchema.parse(args);
+      return withTimeout(() => getSearchResultsTool(input), timeoutMs, 'get_search_results');
+    }
+    case 'stop_search': {
+      const { sessionId } = StopSearchSchema.parse(args);
+      return withTimeout(() => stopSearchTool(sessionId), timeoutMs, 'stop_search');
+    }
+    
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -714,7 +814,7 @@ async function exportMemories(format: 'json' | 'markdown' = 'json', projectId?: 
 // ============================================================================
 
 const server = new Server(
-  { name: 'just-command', version: '0.2.0' },
+  { name: 'just-command', version: '0.3.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -762,7 +862,7 @@ async function main(): Promise<void> {
     console.error('[just-command] Memory search will use BM25 fallback only');
   }
   
-  console.error('[just-command] Starting MCP server (23 tools)...');
+  console.error('[just-command] Starting MCP server (26 tools)...');
   const transport = new StdioServerTransport();
   await server.connect(transport);
   
