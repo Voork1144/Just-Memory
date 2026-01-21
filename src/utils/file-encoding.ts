@@ -127,8 +127,8 @@ function sanitizeUtf8(str: string): string {
 }
 
 /**
- * Check if content appears to be binary (has many non-printable chars)
- * FIX: Corrected function name typo (was appearsToeBinary)
+ * Check if buffer content appears to be binary (has many non-printable chars)
+ * Alias: isBinaryBuffer (for compatibility with filesystem/read.ts)
  */
 export function appearsToBeBinary(content: Buffer): boolean {
   // Sample first 8KB
@@ -144,6 +144,36 @@ export function appearsToBeBinary(content: Buffer): boolean {
   
   // If more than 10% non-printable, likely binary
   return nonPrintable / sample.length > 0.1;
+}
+
+/** Alias for appearsToBeBinary - used by filesystem module */
+export const isBinaryBuffer = appearsToBeBinary;
+
+/**
+ * Detect encoding from buffer content
+ * Checks for BOM markers and binary content
+ */
+export function detectEncoding(buffer: Buffer): 'utf-8' | 'utf-16le' | 'utf-16be' {
+  // Check for BOM (Byte Order Mark)
+  if (buffer.length >= 3) {
+    // UTF-8 BOM
+    if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+      return 'utf-8';
+    }
+  }
+  if (buffer.length >= 2) {
+    // UTF-16 LE BOM
+    if (buffer[0] === 0xFF && buffer[1] === 0xFE) {
+      return 'utf-16le';
+    }
+    // UTF-16 BE BOM
+    if (buffer[0] === 0xFE && buffer[1] === 0xFF) {
+      return 'utf-16be';
+    }
+  }
+  
+  // Default to UTF-8
+  return 'utf-8';
 }
 
 /**
