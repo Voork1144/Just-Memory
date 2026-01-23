@@ -1,7 +1,7 @@
 {
-  "name": "just-command",
-  "version": "0.1.0",
-  "description": "Unified MCP server with persistent memory, filesystem, terminal, and search",
+  "name": "just-memory",
+  "version": "0.5.0",
+  "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,8 +25,9 @@
     "mcp",
     "model-context-protocol",
     "memory",
-    "filesystem",
-    "terminal",
+    "persistent-memory",
+    "semantic-search",
+    "knowledge-graph",
     "ai",
     "claude"
   ],

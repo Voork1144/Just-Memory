@@ -1,12 +1,13 @@
 /**
- * Just-Command MCP Server
+ * Just-Memory MCP Server
  * 
- * A unified MCP server combining persistent memory, filesystem, terminal, and search capabilities.
- * Implements 26 tools for Claude Desktop/Claude.ai integration:
- * - Memory Module: 10 tools
- * - Filesystem Module: 8 tools
- * - Terminal Module: 5 tools
- * - Search Module: 3 tools
+ * A focused MCP server for persistent memory capabilities.
+ * Implements 17 tools for Claude Desktop/Claude.ai integration:
+ * - Memory Module: 16 tools (store, recall, search, delete, recover, update, list, stats, briefing, export, backup, restore, list_backups, link, refresh_context, entity_create)
+ * - Utility: 1 tool (get_config)
+ * 
+ * NOTE: Filesystem, Terminal, and Search modules have been removed as Desktop Commander
+ * already provides these capabilities. This server focuses solely on persistent memory.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -44,35 +45,6 @@ import {
   type MemoryLinkInput,
   type EntityInput,
 } from './memory/index.js';
-
-// Filesystem module imports
-import {
-  readFile,
-  readMultipleFiles,
-  writeFile,
-  editBlock,
-  createDirectory,
-  listDirectory,
-  moveFile,
-  getFileInfo,
-} from './filesystem/index.js';
-
-// Terminal module imports
-import {
-  startProcess,
-  interactWithProcess,
-  readProcessOutput,
-  listSessions,
-  forceTerminate,
-} from './terminal/index.js';
-
-// Search module imports
-import {
-  startSearchTool,
-  getSearchResultsTool,
-  stopSearchTool,
-  type SearchOptions,
-} from './search/index.js';
 
 // P0 utilities
 import { withTimeout, isClaudeDesktopMode, getConfig } from './utils/index.js';
@@ -142,7 +114,6 @@ const MemoryExportSchema = z.object({
   includeDeleted: z.boolean().optional().default(false),
 });
 
-// New memory tool schemas (completing 31-tool spec)
 const MemoryBackupSchema = z.object({
   description: z.string().optional().describe('Optional description for the backup'),
 });
@@ -177,118 +148,6 @@ const MemoryEntityCreateSchema = z.object({
 
 // Utility tool schemas
 const GetConfigSchema = z.object({});
-
-// ============================================================================
-// Filesystem Tool Schemas
-// ============================================================================
-
-const ReadFileSchema = z.object({
-  path: z.string().describe('Path to the file to read'),
-  offset: z.number().min(0).optional().describe('Line offset (0-based)'),
-  length: z.number().min(1).max(1000).optional().describe('Number of lines to read'),
-  encoding: z.enum(['utf-8', 'base64', 'hex']).optional().describe('File encoding'),
-});
-
-const ReadMultipleFilesSchema = z.object({
-  paths: z.array(z.string()).min(1).describe('Array of file paths to read'),
-  encoding: z.enum(['utf-8', 'base64', 'hex']).optional(),
-});
-
-const WriteFileSchema = z.object({
-  path: z.string().describe('Path to write to'),
-  content: z.string().describe('Content to write'),
-  mode: z.enum(['write', 'append']).optional().describe('Write mode'),
-  createDirs: z.boolean().optional().describe('Create parent directories'),
-});
-
-const EditBlockSchema = z.object({
-  path: z.string().describe('Path to the file to edit'),
-  oldText: z.string().describe('Text to find and replace'),
-  newText: z.string().describe('Replacement text'),
-  expectedReplacements: z.number().min(1).optional().describe('Expected number of replacements'),
-});
-
-const CreateDirectorySchema = z.object({
-  path: z.string().describe('Directory path to create'),
-  recursive: z.boolean().optional().describe('Create parent directories'),
-});
-
-const ListDirectorySchema = z.object({
-  path: z.string().describe('Directory path to list'),
-  depth: z.number().min(1).max(5).optional().describe('Max depth (default: 1)'),
-  includeHidden: z.boolean().optional().describe('Include hidden files'),
-  pattern: z.string().optional().describe('Glob pattern filter'),
-});
-
-const MoveFileSchema = z.object({
-  source: z.string().describe('Source path'),
-  destination: z.string().describe('Destination path'),
-  overwrite: z.boolean().optional().describe('Overwrite if exists'),
-});
-
-const GetFileInfoSchema = z.object({
-  path: z.string().describe('Path to get info for'),
-});
-
-// ============================================================================
-// Terminal Tool Schemas
-// ============================================================================
-
-const StartProcessSchema = z.object({
-  command: z.string().describe('Command to run'),
-  args: z.array(z.string()).optional().describe('Command arguments'),
-  cwd: z.string().optional().describe('Working directory'),
-  timeout: z.number().min(100).max(30000).optional().describe('Timeout in ms'),
-});
-
-const InteractProcessSchema = z.object({
-  pid: z.number().describe('Process ID'),
-  input: z.string().describe('Input to send'),
-  timeout: z.number().min(100).max(30000).optional().describe('Timeout in ms'),
-  waitForPrompt: z.boolean().optional().describe('Wait for prompt'),
-});
-
-const ReadOutputSchema = z.object({
-  pid: z.number().describe('Process ID'),
-  offset: z.number().min(0).optional().describe('Line offset'),
-  length: z.number().min(1).max(1000).optional().describe('Lines to read'),
-  timeout: z.number().min(0).max(30000).optional().describe('Wait timeout'),
-});
-
-const ListSessionsSchema = z.object({});
-
-const ForceTerminateSchema = z.object({
-  pid: z.number().describe('Process ID to terminate'),
-  signal: z.enum(['SIGTERM', 'SIGKILL']).optional().describe('Signal to send'),
-});
-
-// ============================================================================
-// Search Tool Schemas
-// ============================================================================
-
-const StartSearchSchema = z.object({
-  path: z.string().describe('Directory path to search in'),
-  pattern: z.string().describe('Search pattern (regex for content, glob for files)'),
-  searchType: z.enum(['content', 'files']).optional().describe('Search type (default: content)'),
-  filePattern: z.string().optional().describe('Glob pattern to filter files (e.g., "*.ts")'),
-  ignoreCase: z.boolean().optional().describe('Case insensitive search (default: true)'),
-  includeHidden: z.boolean().optional().describe('Include hidden files'),
-  maxResults: z.number().min(1).max(10000).optional().describe('Max results (default: 1000)'),
-  contextLines: z.number().min(0).max(10).optional().describe('Lines of context around matches'),
-  literalSearch: z.boolean().optional().describe('Treat pattern as literal string'),
-  timeout: z.number().min(1000).max(60000).optional().describe('Search timeout in ms'),
-});
-
-const GetSearchResultsSchema = z.object({
-  sessionId: z.string().describe('Search session ID'),
-  offset: z.number().min(0).optional().describe('Result offset (default: 0)'),
-  limit: z.number().min(1).max(100).optional().describe('Results per page (default: 50)'),
-});
-
-const StopSearchSchema = z.object({
-  sessionId: z.string().describe('Search session ID to stop'),
-});
-
 
 // ============================================================================
 // Memory Tool Definitions
@@ -489,232 +348,6 @@ const MEMORY_TOOLS: Tool[] = [
 ];
 
 // ============================================================================
-// Filesystem Tool Definitions
-// ============================================================================
-
-const FILESYSTEM_TOOLS: Tool[] = [
-  {
-    name: 'read_file',
-    description: 'Read file with pagination and encoding support. Supports utf-8, base64, hex for binary files.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File path to read' },
-        offset: { type: 'number', minimum: 0, description: 'Line offset (0-based)' },
-        length: { type: 'number', minimum: 1, maximum: 1000, description: 'Lines to read' },
-        encoding: { type: 'string', enum: ['utf-8', 'base64', 'hex'] },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'read_multiple_files',
-    description: 'Read multiple files in batch. Returns content for each file or error.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        paths: { type: 'array', items: { type: 'string' }, description: 'Array of file paths' },
-        encoding: { type: 'string', enum: ['utf-8', 'base64', 'hex'] },
-      },
-      required: ['paths'],
-    },
-  },
-  {
-    name: 'write_file',
-    description: 'Write content to file. Supports write and append modes.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File path to write' },
-        content: { type: 'string', description: 'Content to write' },
-        mode: { type: 'string', enum: ['write', 'append'] },
-        createDirs: { type: 'boolean', description: 'Create parent directories' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'edit_block',
-    description: 'Surgical find/replace edit. Finds exact text and replaces it.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File to edit' },
-        oldText: { type: 'string', description: 'Text to find' },
-        newText: { type: 'string', description: 'Replacement text' },
-        expectedReplacements: { type: 'number', minimum: 1, description: 'Expected occurrences' },
-      },
-      required: ['path', 'oldText', 'newText'],
-    },
-  },
-  {
-    name: 'create_directory',
-    description: 'Create a directory (recursive by default).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Directory path' },
-        recursive: { type: 'boolean' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'list_directory',
-    description: 'List directory contents with depth control.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Directory path' },
-        depth: { type: 'number', minimum: 1, maximum: 5 },
-        includeHidden: { type: 'boolean' },
-        pattern: { type: 'string', description: 'Glob filter' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'move_file',
-    description: 'Move or rename a file. Errors if destination exists (set overwrite=true to replace).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        source: { type: 'string' },
-        destination: { type: 'string' },
-        overwrite: { type: 'boolean' },
-      },
-      required: ['source', 'destination'],
-    },
-  },
-  {
-    name: 'get_file_info',
-    description: 'Get detailed file metadata (size, modified, permissions, line count).',
-    inputSchema: {
-      type: 'object',
-      properties: { path: { type: 'string' } },
-      required: ['path'],
-    },
-  },
-];
-
-// ============================================================================
-// Terminal Tool Definitions
-// ============================================================================
-
-const TERMINAL_TOOLS: Tool[] = [
-  {
-    name: 'start_process',
-    description: 'Start a new process. Timeout enforced (5s in Claude Desktop mode).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'Command to run' },
-        args: { type: 'array', items: { type: 'string' } },
-        cwd: { type: 'string', description: 'Working directory' },
-        timeout: { type: 'number', minimum: 100, maximum: 30000 },
-      },
-      required: ['command'],
-    },
-  },
-  {
-    name: 'interact_with_process',
-    description: 'Send input to a running process and get output.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        pid: { type: 'number', description: 'Process ID' },
-        input: { type: 'string', description: 'Input to send' },
-        timeout: { type: 'number', minimum: 100, maximum: 30000 },
-        waitForPrompt: { type: 'boolean' },
-      },
-      required: ['pid', 'input'],
-    },
-  },
-  {
-    name: 'read_process_output',
-    description: 'Read process output with pagination.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        pid: { type: 'number', description: 'Process ID' },
-        offset: { type: 'number', minimum: 0 },
-        length: { type: 'number', minimum: 1, maximum: 1000 },
-        timeout: { type: 'number', minimum: 0, maximum: 30000 },
-      },
-      required: ['pid'],
-    },
-  },
-  {
-    name: 'list_sessions',
-    description: 'List all active terminal sessions.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'force_terminate',
-    description: 'Force terminate a process.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        pid: { type: 'number', description: 'Process ID' },
-        signal: { type: 'string', enum: ['SIGTERM', 'SIGKILL'] },
-      },
-      required: ['pid'],
-    },
-  },
-];
-
-// ============================================================================
-// Search Tool Definitions
-// ============================================================================
-
-const SEARCH_TOOLS: Tool[] = [
-  {
-    name: 'start_search',
-    description: 'Start an async ripgrep-powered search. Returns a session ID for retrieving results.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Directory to search in' },
-        pattern: { type: 'string', description: 'Search pattern' },
-        searchType: { type: 'string', enum: ['content', 'files'], description: 'Search type (default: content)' },
-        filePattern: { type: 'string', description: 'File glob filter (e.g., "*.ts")' },
-        ignoreCase: { type: 'boolean', description: 'Case insensitive (default: true)' },
-        includeHidden: { type: 'boolean' },
-        maxResults: { type: 'number', minimum: 1, maximum: 10000 },
-        contextLines: { type: 'number', minimum: 0, maximum: 10 },
-        literalSearch: { type: 'boolean', description: 'Treat as literal string' },
-        timeout: { type: 'number', minimum: 1000, maximum: 60000 },
-      },
-      required: ['path', 'pattern'],
-    },
-  },
-  {
-    name: 'get_search_results',
-    description: 'Get paginated results from a search session.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        sessionId: { type: 'string', description: 'Search session ID' },
-        offset: { type: 'number', minimum: 0, description: 'Result offset' },
-        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Results per page' },
-      },
-      required: ['sessionId'],
-    },
-  },
-  {
-    name: 'stop_search',
-    description: 'Cancel a running search session.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        sessionId: { type: 'string', description: 'Session ID to cancel' },
-      },
-      required: ['sessionId'],
-    },
-  },
-];
-
-// ============================================================================
 // Utility Tool Definitions
 // ============================================================================
 
@@ -726,10 +359,8 @@ const UTILITY_TOOLS: Tool[] = [
   },
 ];
 
-// Combine all tools
-const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOOLS, ...SEARCH_TOOLS, ...UTILITY_TOOLS];
-
-
+// Combine all tools (Memory only - filesystem/terminal/search removed, use Desktop Commander)
+const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...UTILITY_TOOLS];
 
 // ============================================================================
 // Tool Handlers
@@ -738,8 +369,8 @@ const ALL_TOOLS: Tool[] = [...MEMORY_TOOLS, ...FILESYSTEM_TOOLS, ...TERMINAL_TOO
 async function handleToolCall(name: string, args: unknown): Promise<unknown> {
   const timeoutMs = isClaudeDesktopMode() ? 4500 : 30000;
   
-  // Memory tools
   switch (name) {
+    // Memory tools
     case 'memory_store': {
       const input = MemoryStoreSchema.parse(args);
       return withTimeout(() => storeMemory(input as MemoryInput), timeoutMs, 'memory_store');
@@ -796,78 +427,6 @@ async function handleToolCall(name: string, args: unknown): Promise<unknown> {
       const input = MemoryExportSchema.parse(args);
       return withTimeout(() => exportMemories(input.format, input.projectId, input.includeDeleted), timeoutMs, 'memory_export');
     }
-    
-    // Filesystem tools
-    case 'read_file': {
-      const input = ReadFileSchema.parse(args);
-      return withTimeout(() => readFile(input), timeoutMs, 'read_file');
-    }
-    case 'read_multiple_files': {
-      const input = ReadMultipleFilesSchema.parse(args);
-      return withTimeout(() => readMultipleFiles(input), timeoutMs, 'read_multiple_files');
-    }
-    case 'write_file': {
-      const input = WriteFileSchema.parse(args);
-      return withTimeout(() => writeFile(input), timeoutMs, 'write_file');
-    }
-    case 'edit_block': {
-      const input = EditBlockSchema.parse(args);
-      return withTimeout(() => editBlock(input), timeoutMs, 'edit_block');
-    }
-    case 'create_directory': {
-      const input = CreateDirectorySchema.parse(args);
-      return withTimeout(() => createDirectory(input), timeoutMs, 'create_directory');
-    }
-    case 'list_directory': {
-      const input = ListDirectorySchema.parse(args);
-      return withTimeout(() => listDirectory(input), timeoutMs, 'list_directory');
-    }
-    case 'move_file': {
-      const input = MoveFileSchema.parse(args);
-      return withTimeout(() => moveFile(input), timeoutMs, 'move_file');
-    }
-    case 'get_file_info': {
-      const input = GetFileInfoSchema.parse(args);
-      return withTimeout(() => getFileInfo(input), timeoutMs, 'get_file_info');
-    }
-    
-    // Terminal tools
-    case 'start_process': {
-      const input = StartProcessSchema.parse(args);
-      return withTimeout(() => startProcess(input), timeoutMs, 'start_process');
-    }
-    case 'interact_with_process': {
-      const input = InteractProcessSchema.parse(args);
-      return withTimeout(() => interactWithProcess(input), timeoutMs, 'interact_with_process');
-    }
-    case 'read_process_output': {
-      const input = ReadOutputSchema.parse(args);
-      return withTimeout(() => readProcessOutput(input), timeoutMs, 'read_process_output');
-    }
-    case 'list_sessions': {
-      ListSessionsSchema.parse(args);
-      return withTimeout(() => listSessions(), timeoutMs, 'list_sessions');
-    }
-    case 'force_terminate': {
-      const input = ForceTerminateSchema.parse(args);
-      return withTimeout(() => forceTerminate(input), timeoutMs, 'force_terminate');
-    }
-    
-    // Search tools
-    case 'start_search': {
-      const input = StartSearchSchema.parse(args);
-      return withTimeout(() => startSearchTool(input as SearchOptions), timeoutMs, 'start_search');
-    }
-    case 'get_search_results': {
-      const input = GetSearchResultsSchema.parse(args);
-      return withTimeout(() => getSearchResultsTool(input), timeoutMs, 'get_search_results');
-    }
-    case 'stop_search': {
-      const { sessionId } = StopSearchSchema.parse(args);
-      return withTimeout(() => stopSearchTool(sessionId), timeoutMs, 'stop_search');
-    }
-    
-    // New memory tools (completing 31-tool spec)
     case 'memory_backup': {
       const { description } = MemoryBackupSchema.parse(args);
       return withTimeout(() => backupDatabase(description), timeoutMs, 'memory_backup');
@@ -973,7 +532,7 @@ async function exportMemories(format: 'json' | 'markdown' = 'json', projectId?: 
 // ============================================================================
 
 const server = new Server(
-  { name: 'just-command', version: '0.3.0' },
+  { name: 'just-memory', version: '0.5.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -986,7 +545,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   
   try {
     const result = await handleToolCall(name, args ?? {});
-    // Ensure text is always a string (JSON.stringify(undefined) returns undefined, not "undefined")
     let textResult: string;
     if (typeof result === 'string') {
       textResult = result;
@@ -1015,41 +573,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ============================================================================
 
 async function main(): Promise<void> {
-  console.error('[just-command] Initializing database...');
+  console.error('[just-memory] Initializing database...');
   await initDatabase();
   
-  console.error('[just-command] Initializing embeddings model...');
+  console.error('[just-memory] Initializing embeddings model...');
   try {
     await initEmbeddings();
-    // Pre-warm the model with a dummy embedding to avoid cold start on first search
-    console.error('[just-command] Pre-warming embeddings model...');
+    console.error('[just-memory] Pre-warming embeddings model...');
     await generateEmbedding('warmup');
-    console.error('[just-command] Embeddings model ready');
+    console.error('[just-memory] Embeddings model ready');
   } catch (err) {
-    console.error('[just-command] Warning: Embeddings init failed:', err);
-    console.error('[just-command] Memory search will use BM25 fallback only');
+    console.error('[just-memory] Warning: Embeddings init failed:', err);
+    console.error('[just-memory] Memory search will use BM25 fallback only');
   }
   
-  console.error('[just-command] Starting MCP server (26 tools)...');
+  console.error('[just-memory] Starting MCP server (17 tools - Memory only)...');
   const transport = new StdioServerTransport();
   await server.connect(transport);
   
-  console.error('[just-command] Server running on stdio');
+  console.error('[just-memory] Server running on stdio');
+  console.error('[just-memory] Note: Filesystem/Terminal/Search removed - use Desktop Commander');
   
   process.on('SIGINT', async () => {
-    console.error('[just-command] Shutting down...');
+    console.error('[just-memory] Shutting down...');
     await closeDatabase();
     process.exit(0);
   });
   
   process.on('SIGTERM', async () => {
-    console.error('[just-command] Shutting down...');
+    console.error('[just-memory] Shutting down...');
     await closeDatabase();
     process.exit(0);
   });
 }
 
 main().catch((error) => {
-  console.error('[just-command] Fatal error:', error);
+  console.error('[just-memory] Fatal error:', error);
   process.exit(1);
 });
