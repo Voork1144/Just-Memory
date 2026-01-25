@@ -249,6 +249,60 @@ CREATE TRIGGER IF NOT EXISTS limit_backups AFTER INSERT ON backups BEGIN
     SELECT id FROM backups ORDER BY created_at DESC LIMIT -1 OFFSET 10
   );
 END;
+
+-- =============================================================================
+-- AGENTS TABLE
+-- AI agents with their configurations and capabilities
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+
+  -- Agent identity
+  name TEXT NOT NULL,
+
+  -- Type: 'assistant', 'specialist', 'coordinator', 'custom'
+  type TEXT NOT NULL DEFAULT 'assistant',
+
+  -- Description of what this agent does
+  description TEXT,
+
+  -- System prompt / instructions for this agent
+  system_prompt TEXT,
+
+  -- Embedding for semantic search
+  embedding BLOB,
+
+  -- Project isolation (D15)
+  project_id TEXT,
+
+  -- Agent capabilities (JSON array of tool names or capability flags)
+  capabilities TEXT DEFAULT '[]',
+
+  -- Agent configuration (JSON object)
+  config TEXT DEFAULT '{}',
+
+  -- Arbitrary metadata (JSON object)
+  metadata TEXT DEFAULT '{}',
+
+  -- Status: 'active', 'inactive', 'archived'
+  status TEXT NOT NULL DEFAULT 'active',
+
+  -- Timestamps
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+
+  -- Soft delete (D4)
+  deleted_at TEXT,
+
+  -- Unique constraint on name within project
+  UNIQUE(name, project_id)
+);
+
+-- Indexes for agents
+CREATE INDEX IF NOT EXISTS idx_agents_name ON agents(name) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_agents_type ON agents(type) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_agents_project ON agents(project_id) WHERE deleted_at IS NULL;
 `;
 
 /**

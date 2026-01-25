@@ -68,3 +68,19 @@ export {
   type SearchOptions,
   type SearchResult,
 } from './search.js';
+
+// Agents
+export {
+  createAgent,
+  getAgent,
+  getAgentByName,
+  updateAgent,
+  listAgents,
+  deleteAgent,
+  recoverAgent,
+  getAgentStats,
+  type AgentInput,
+  type Agent,
+  type AgentType,
+  type AgentStatus,
+} from './agents.js';
