@@ -1,0 +1,7 @@
+node_modules/
+.cache/
+*.db
+*.db-shm
+*.db-wal
+*.tsbuildinfo
+.ruff_cache/
