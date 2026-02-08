@@ -25,7 +25,7 @@ export function backupMemories(db: Database.Database, projectId: string, backupD
   const edges = db.prepare('SELECT id, project_id, from_id, to_id, relation_type, confidence, metadata, valid_from, valid_to FROM edges WHERE project_id = ? OR project_id = \'global\'').all(projectId);
 
   const backup = {
-    version: '4.3.2',
+    version: '4.3.3',
     project_id: projectId,
     created_at: new Date().toISOString(),
     counts: {

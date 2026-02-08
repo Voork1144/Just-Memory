@@ -12,6 +12,9 @@ dist-v2.1/*.py
 dist-v2.1/*.bak
 dist-v2.1/*.backup.js
 
+# Source maps (don't expose source via npm)
+*.map
+
 # Dev config
 tsconfig.json
 tsconfig.v2.1.json

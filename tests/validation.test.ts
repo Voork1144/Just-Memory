@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import {
   validateContent, validateTags, validateEntityName,
   validateObservations, sanitizeLikePattern, getEffectiveProject,
+  sanitizeProjectId,
 } from '../src/validation.js';
 
 describe('validateContent', () => {
@@ -99,6 +100,41 @@ describe('sanitizeLikePattern', () => {
   it('should handle normal strings', () => {
     const result = sanitizeLikePattern('normal text');
     assert.strictEqual(result, 'normal text');
+  });
+
+  it('should escape backslashes before % and _', () => {
+    const result = sanitizeLikePattern('path\\to\\file%name');
+    assert.strictEqual(result, 'path\\\\to\\\\file\\%name');
+  });
+
+  it('should escape lone backslashes', () => {
+    const result = sanitizeLikePattern('back\\slash');
+    assert.strictEqual(result, 'back\\\\slash');
+  });
+});
+
+describe('sanitizeProjectId', () => {
+  it('should accept valid project IDs', () => {
+    assert.strictEqual(sanitizeProjectId('my-project'), 'my-project');
+    assert.strictEqual(sanitizeProjectId('test_123'), 'test_123');
+  });
+
+  it('should reject reserved project IDs', () => {
+    assert.throws(() => sanitizeProjectId('global'), /reserved/i);
+    assert.throws(() => sanitizeProjectId('system'), /reserved/i);
+    assert.throws(() => sanitizeProjectId('admin'), /reserved/i);
+    assert.throws(() => sanitizeProjectId('default'), /reserved/i);
+  });
+
+  it('should reject reserved IDs case-insensitively', () => {
+    assert.throws(() => sanitizeProjectId('GLOBAL'), /reserved/i);
+    assert.throws(() => sanitizeProjectId('System'), /reserved/i);
+  });
+
+  it('should reject invalid patterns', () => {
+    assert.throws(() => sanitizeProjectId('has spaces'), /invalid/i);
+    assert.throws(() => sanitizeProjectId('../traversal'), /invalid/i);
+    assert.throws(() => sanitizeProjectId(''), /invalid/i);
   });
 });
 

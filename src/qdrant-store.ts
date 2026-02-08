@@ -13,9 +13,8 @@
  * - Graceful shutdown on process exit
  */
 import { spawn, ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, createWriteStream } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import type { VectorStore, VectorFilter, VectorResult, VectorMetadata } from './vector-store.js';
 
 // ============================================================================

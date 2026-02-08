@@ -4,7 +4,7 @@
  * v4.0: VectorStore-aware similarity search (Qdrant or sqlite-vec).
  */
 import Database from 'better-sqlite3';
-import { safeParse, EMBEDDING_DIM } from './config.js';
+import { EMBEDDING_DIM } from './config.js';
 import type { VectorStore } from './vector-store.js';
 
 // ============================================================================

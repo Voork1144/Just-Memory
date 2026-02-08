@@ -73,13 +73,11 @@ interface SqliteVecStoreOptions {
 export class SqliteVecStore implements VectorStore {
   readonly backend = 'sqlite-vec';
   private db: Database.Database;
-  private dim: number;
   private _hnswSearch?: (embedding: Float32Array, limit: number, efSearch: number) => string[];
   private _hnswReady: () => boolean;
 
   constructor(options: SqliteVecStoreOptions) {
     this.db = options.db;
-    this.dim = options.embeddingDim;
     this._hnswSearch = options.hnswSearch;
     this._hnswReady = options.hnswReady || (() => false);
   }
@@ -130,6 +128,10 @@ export class SqliteVecStore implements VectorStore {
           sql += " AND (m.project_id = ? OR m.project_id = 'global')";
           params.push(filter.projectId);
         }
+        if (filter?.confidenceThreshold && filter.confidenceThreshold > 0) {
+          sql += ' AND m.confidence >= ?';
+          params.push(filter.confidenceThreshold);
+        }
         sql += ' ORDER BY score DESC LIMIT ?';
         params.push(limit);
 
@@ -152,6 +154,10 @@ export class SqliteVecStore implements VectorStore {
     if (filter?.projectId) {
       sql += " AND (m.project_id = ? OR m.project_id = 'global')";
       params.push(filter.projectId);
+    }
+    if (filter?.confidenceThreshold && filter.confidenceThreshold > 0) {
+      sql += ' AND m.confidence >= ?';
+      params.push(filter.confidenceThreshold);
     }
     sql += ' ORDER BY score DESC LIMIT ?';
     params.push(limit);

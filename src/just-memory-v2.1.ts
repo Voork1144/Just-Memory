@@ -1,5 +1,5 @@
 /**
- * Just-Memory v4.3.2 — MCP Server Orchestrator (23 tools)
+ * Just-Memory v4.3.3 — MCP Server Orchestrator (23 tools)
  *
  * Thin orchestrator: DB setup, HNSW management, wrapper functions, consolidation timer,
  * MCP server lifecycle. All business logic extracted to 19 modules.
@@ -12,7 +12,7 @@
  *   contradiction-resolution.ts, tool-logging.ts, schema.ts, stats.ts,
  *   tool-handlers.ts
  *
- * v4.3.2: Test coverage hardening — 3 new test suites (contradiction-resolution, stats,
+ * v4.3.3: Test coverage hardening — 3 new test suites (contradiction-resolution, stats,
  *         tool-logging), expanded search tests, cron leap year fix (365→366)
  * v4.3.1: Hostile audit remediation — session error logging, projectId whitelist,
  *         backup TOCTOU fix + schema validation, embedding worker atomic SELECT,
@@ -37,27 +37,24 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import Database from 'better-sqlite3';
 import {
-  MAX_CONTENT_LENGTH, MAX_TAG_LENGTH, MAX_TAGS_COUNT, MAX_ENTITY_NAME_LENGTH, MAX_OBSERVATIONS,
   BACKUP_DIR, MODEL_CACHE, DB_DIR, DB_PATH, EMBEDDING_DIM,
   GLOBAL_PROJECT,
   CONTRADICTION_CONFIG,
-  CONSOLIDATION_INTERVAL_MS, IDLE_THRESHOLD_MS, TOOL_LOG_MAX_OUTPUT, TOOL_LOG_EXCLUDED,
+  CONSOLIDATION_INTERVAL_MS, IDLE_THRESHOLD_MS, TOOL_LOG_EXCLUDED,
   QDRANT_ENABLED, QDRANT_PORT, QDRANT_DATA_DIR, QDRANT_BINARY, QDRANT_COLLECTION,
   WRITE_LOCK_MAX_CONCURRENT,
   EMBEDDING_WORKER_BATCH_SIZE, EMBEDDING_WORKER_INTERVAL_MS,
   EMBEDDING_MODEL,
-  safeParse,
   type ContradictionResult,
 } from './config.js';
-import { randomUUID } from 'crypto';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { platform } from 'os';
 import { join, dirname, basename, resolve, sep } from 'path';
 import * as sqliteVec from 'sqlite-vec';
 
 // v4.0: Write lock, vector store, Qdrant
 import { WriteLock } from './write-lock.js';
-import { SqliteVecStore, toHNSWProvider } from './vector-store.js';
+import { SqliteVecStore } from './vector-store.js';
 import type { VectorStore } from './vector-store.js';
 import { QdrantStore } from './qdrant-store.js';
 import { generateEmbedding } from './models.js';
@@ -82,7 +79,6 @@ import {
 } from './contradiction-resolution.js';
 import {
   logToolCall as _logToolCall,
-  getToolStats as _getToolStats,
   getToolHistory as _getToolHistory,
 } from './tool-logging.js';
 import {
@@ -153,8 +149,6 @@ import {
 
 // Search — imported from search.ts
 import {
-  keywordSearch as _keywordSearch,
-  semanticSearch as _semanticSearch,
   hybridSearch as _hybridSearch,
 } from './search.js';
 
@@ -173,7 +167,6 @@ import {
 // Consolidation — imported from consolidation.ts
 import {
   findSimilarMemories as _findSimilarMemories,
-  findSimilarMemoriesAsync as _findSimilarMemoriesAsync,
   strengthenActiveMemories as _strengthenActiveMemories,
   applyMemoryDecay as _applyMemoryDecay,
   cleanExpiredScratchpad as _cleanExpiredScratchpad,
@@ -181,7 +174,7 @@ import {
 } from './consolidation.js';
 
 // Validation — imported from validation.ts
-import { sanitizeLikePattern, getEffectiveProject as _getEffectiveProject } from './validation.js';
+import { getEffectiveProject as _getEffectiveProject } from './validation.js';
 
 // ============================================================================
 // Project Detection
@@ -407,9 +400,6 @@ function getEffectiveProject(projectId?: string): string {
 function logToolCall(toolName: string, args: any, output: any, success: boolean, error: string | null, durationMs: number, projectId: string): string {
   return _logToolCall(db, toolName, args, output, success, error, durationMs, projectId, updateSessionState);
 }
-function getToolStats(projectId?: string): any {
-  return _getToolStats(db, projectId);
-}
 function getToolHistory(toolName?: string, success?: boolean, since?: string, limit: number = 50, projectId?: string): any[] {
   return _getToolHistory(db, toolName, success, since, limit, projectId);
 }
@@ -422,7 +412,7 @@ function pruneToolLogs(daysToKeep: number = 7): number {
 // Session & Crash Recovery — imported from session.ts
 // ============================================================================
 import {
-  SESSION_STATE_KEYS, CURRENT_SESSION_ID,
+  CURRENT_SESSION_ID,
   updateSessionHeartbeat as _updateSessionHeartbeat,
   updateSessionState as _updateSessionState,
   detectCrashStateForBriefing as _detectCrashStateForBriefing,
@@ -592,12 +582,6 @@ function findContradictionsProactive(content: string, projectId?: string, limit 
 // Search Functions — imported from search.ts
 // v4.0: Pass VectorStore when available, fallback to HNSWProvider
 // ============================================================================
-function keywordSearch(query: string, projectId: string, limit: number, confidenceThreshold: number) {
-  return _keywordSearch(db, query, projectId, limit, confidenceThreshold, fts5Ready);
-}
-function semanticSearch(query: string, projectId: string, limit: number, confidenceThreshold: number) {
-  return _semanticSearch(db, query, projectId, limit, confidenceThreshold, vectorStore || getHNSWProvider());
-}
 function hybridSearch(query: string, projectId: string, limit = 10, confidenceThreshold = 0) {
   return _hybridSearch(db, query, projectId, limit, confidenceThreshold, vectorStore || getHNSWProvider(), fts5Ready);
 }
@@ -682,9 +666,6 @@ function isIdle(): boolean {
 // v4.0: Prefer async VectorStore-aware version when store is ready
 function findSimilarMemories(projectId?: string, similarityThreshold = 0.85, limit = 20) {
   return _findSimilarMemories(db, getEffectiveProject(projectId), similarityThreshold, limit);
-}
-async function findSimilarMemoriesAsync(projectId?: string, similarityThreshold = 0.85, limit = 20) {
-  return _findSimilarMemoriesAsync(db, getEffectiveProject(projectId), vectorStore || undefined, similarityThreshold, limit);
 }
 function strengthenActiveMemories(projectId?: string) {
   return _strengthenActiveMemories(db, getEffectiveProject(projectId));
@@ -933,7 +914,7 @@ function setCurrentProject(projectId: string, path?: string) {
 // MCP Server Setup
 // ============================================================================
 const server = new Server(
-  { name: 'just-memory', version: '4.3.2' },
+  { name: 'just-memory', version: '4.3.3' },
   { capabilities: { tools: {} } }
 );
 
@@ -1023,7 +1004,7 @@ async function buildHealthInfo(): Promise<any> {
   const vectorCount = vectorStore?.isReady() ? await vectorStore.count() : 0;
   return {
     status: 'ok',
-    version: '4.3.2',
+    version: '4.3.3',
     session_id: CURRENT_SESSION_ID,
     uptime_seconds: Math.floor((Date.now() - sessionStartMs) / 1000),
     models: {

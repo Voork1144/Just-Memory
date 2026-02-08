@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 import { safeParse } from './config.js';
 import { generateEmbedding } from './models.js';
 import { sanitizeLikePattern } from './validation.js';
-import { calculateRetention, calculateEffectiveConfidence, assessConfidence } from './memory.js';
+import { calculateRetention, calculateEffectiveConfidence } from './memory.js';
 import type { VectorStore } from './vector-store.js';
 
 // Backward compat — still accept HNSWProvider from contradiction.ts

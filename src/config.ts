@@ -149,7 +149,8 @@ export const DECAY_CONSTANT = 0.5;
 // Qdrant Config
 // ============================================================================
 export const QDRANT_ENABLED = process.env.JUST_MEMORY_QDRANT !== 'false';
-export const QDRANT_PORT = parseInt(process.env.JUST_MEMORY_QDRANT_PORT || '6333', 10);
+const _rawPort = parseInt(process.env.JUST_MEMORY_QDRANT_PORT || '6333', 10);
+export const QDRANT_PORT = (_rawPort >= 1 && _rawPort <= 65535) ? _rawPort : 6333;
 export const QDRANT_DATA_DIR = join(homedir(), '.just-memory', 'qdrant');
 export const QDRANT_BINARY = process.env.JUST_MEMORY_QDRANT_BINARY || join(QDRANT_DATA_DIR, 'bin', 'qdrant');
 export const QDRANT_COLLECTION = 'memories';
@@ -157,7 +158,8 @@ export const QDRANT_COLLECTION = 'memories';
 // ============================================================================
 // Concurrency Config
 // ============================================================================
-export const WRITE_LOCK_MAX_CONCURRENT = parseInt(process.env.JUST_MEMORY_MAX_WRITERS || '1', 10);
+const _rawWriters = parseInt(process.env.JUST_MEMORY_MAX_WRITERS || '1', 10);
+export const WRITE_LOCK_MAX_CONCURRENT = (_rawWriters >= 1 && _rawWriters <= 10) ? _rawWriters : 1;
 
 // ============================================================================
 // Embedding Worker Config

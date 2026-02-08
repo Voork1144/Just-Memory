@@ -1,6 +1,6 @@
 {
   "name": "just-memory",
-  "version": "4.3.2",
+  "version": "4.3.3",
   "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
   "main": "dist-v2.1/just-memory-v2.1.js",
   "types": "dist-v2.1/just-memory-v2.1.d.ts",
@@ -16,7 +16,8 @@
     "test:quick": "tsx --test tests/config.test.ts tests/validation.test.ts",
     "test:deps": "node -e \"console.log('Dependencies loaded successfully')\"",
     "lint": "eslint src/",
-    "clean": "rimraf dist-v2.1"
+    "clean": "rimraf dist-v2.1",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "mcp",

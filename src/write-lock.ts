@@ -15,7 +15,6 @@ interface QueueEntry {
 }
 
 export class WriteLock {
-  private _locked = false;
   private _queue: QueueEntry[] = [];
   private _maxConcurrent: number;
   private _activeCount = 0;
@@ -32,8 +31,8 @@ export class WriteLock {
     this._maxConcurrent = Math.max(1, maxConcurrent);
   }
 
-  /** Acquire the write lock. Resolves when it's your turn. */
-  async acquire(): Promise<void> {
+  /** Acquire the write lock. Resolves when it's your turn. Optional timeout in ms. */
+  async acquire(timeoutMs?: number): Promise<void> {
     this._totalAcquires++;
 
     if (this._activeCount < this._maxConcurrent) {
@@ -44,9 +43,21 @@ export class WriteLock {
     // Queue this writer
     this._totalWaits++;
     return new Promise<void>((resolve, reject) => {
-      this._queue.push({ resolve, reject });
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const entry: QueueEntry = {
+        resolve: () => { if (timer) clearTimeout(timer); resolve(); },
+        reject: (err: Error) => { if (timer) clearTimeout(timer); reject(err); },
+      };
+      this._queue.push(entry);
       if (this._queue.length > this._maxQueueDepth) {
         this._maxQueueDepth = this._queue.length;
+      }
+      if (timeoutMs && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          const idx = this._queue.indexOf(entry);
+          if (idx !== -1) this._queue.splice(idx, 1);
+          reject(new Error(`Write lock timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
       }
     });
   }

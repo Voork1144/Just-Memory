@@ -4,7 +4,7 @@
 import { MAX_CONTENT_LENGTH, MAX_TAG_LENGTH, MAX_TAGS_COUNT, MAX_ENTITY_NAME_LENGTH, MAX_OBSERVATIONS } from './config.js';
 
 export function sanitizeLikePattern(input: string): string {
-  return input.replace(/[%_]/g, '\\$&');
+  return input.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&');
 }
 
 export function validateContent(content: string): void {
@@ -45,10 +45,15 @@ const PROJECT_ID_PATTERN = /^[a-z0-9_-]{1,64}$/;
  * Sanitize and validate a project ID string.
  * Returns the cleaned ID or throws if invalid after cleaning.
  */
+const RESERVED_PROJECT_IDS = new Set(['global', 'system', 'admin', 'default']);
+
 export function sanitizeProjectId(raw: string): string {
   const cleaned = raw.trim().toLowerCase();
   if (!PROJECT_ID_PATTERN.test(cleaned)) {
     throw new Error(`Invalid project ID: must match ${PROJECT_ID_PATTERN} (got "${cleaned.slice(0, 20)}")`);
+  }
+  if (RESERVED_PROJECT_IDS.has(cleaned)) {
+    throw new Error(`Project ID "${cleaned}" is reserved`);
   }
   return cleaned;
 }

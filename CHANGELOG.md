@@ -2,6 +2,29 @@
 
 All notable changes to Just-Memory are documented here.
 
+## [4.3.3] - 2026-02-08
+
+### Fixed
+- **confidenceThreshold ignored in vector search** — VectorFilter.confidenceThreshold was defined but never applied to SQL queries in both HNSW and fallback search paths
+- **LIKE escape missing backslash** — sanitizeLikePattern now escapes backslashes before `%` and `_`
+- **Source maps shipped to npm** — added `*.map` to .npmignore
+
+### Added
+- Write lock timeout support — `acquire(timeoutMs)` prevents indefinite waits
+- Reserved project ID validation — rejects "global", "system", "admin", "default"
+- Port and writer count range validation in config
+- Strict compiler flags — `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`
+- Lint step in CI pipeline
+- `prepublishOnly` script (build + test before publish)
+- ReDoS protection — sentence length cap (500 chars) and word array cap (500 words) in contradiction detection
+- Quick Start and Troubleshooting sections in README
+- Dynamic CI status badge in README
+
+### Changed
+- Removed 26 unused imports and dead wrapper functions (surfaced by strict compiler flags)
+
+---
+
 ## [4.3.2] - 2026-02-08
 
 ### Added

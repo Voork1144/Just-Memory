@@ -1,11 +1,11 @@
-# Just-Memory v4.3.2
+# Just-Memory v4.3.3
 
 > A persistent memory MCP server for Claude Desktop and Claude Code — semantic search, knowledge graphs, confidence scoring, contradiction detection, and session context across conversations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-411%20passing-brightgreen.svg)](#build-from-source)
+![CI](https://github.com/Voork1144/Just-Memory/actions/workflows/ci.yml/badge.svg)
 
 ## What It Does
 
@@ -159,6 +159,27 @@ npm run dev
 # Quick test (config + validation only)
 npm run test:quick
 ```
+
+## Quick Start
+
+Once configured, Claude can use memory tools in conversation:
+
+1. **Store a memory** — Claude calls `memory_store` with content, type, and tags
+2. **Search later** — `memory_search` finds relevant memories via hybrid keyword + semantic search
+3. **Session briefing** — `memory_briefing` at session start recovers context from previous sessions
+4. **Track tasks** — `memory_task` tracks multi-step work for crash recovery
+
+All tools are available automatically through the MCP protocol. See the [Tools](#tools-23) section for the full list.
+
+## Troubleshooting
+
+**"Database is locked"** — Another process is holding the SQLite write lock. Restart Claude Desktop or kill any orphaned `node` processes running `just-memory`.
+
+**Qdrant fails to start** — The binary is auto-downloaded on first use. If behind a proxy, set `JUST_MEMORY_QDRANT=false` to use sqlite-vec instead.
+
+**Slow first startup** — The embedding model (~500MB for e5-large-v2) downloads on first use. Subsequent starts use the cached model. Use `JUST_MEMORY_EMBEDDING=small` for a faster ~100MB model.
+
+**Build fails with "node-gyp" errors** — `better-sqlite3` requires a C++ compiler. Install build tools: `apt install build-essential` (Debian/Ubuntu), `xcode-select --install` (macOS), or install Visual Studio Build Tools (Windows).
 
 ## Updating
 

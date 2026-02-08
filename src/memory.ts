@@ -11,7 +11,7 @@ import {
   type ContradictionResult,
 } from './config.js';
 import { generateEmbedding } from './models.js';
-import { validateContent, validateTags, getEffectiveProject } from './validation.js';
+import { validateContent, validateTags } from './validation.js';
 import { EMBEDDING_DIM } from './config.js';
 
 // ============================================================================

@@ -41,7 +41,7 @@ describe('backupMemories', () => {
 
     // Verify file content
     const content = JSON.parse(readFileSync(result.filepath, 'utf-8'));
-    assert.strictEqual(content.version, '4.3.2');
+    assert.strictEqual(content.version, '4.3.3');
     assert.strictEqual(content.project_id, projectId);
     assert.ok(content.data.memories);
     assert.strictEqual(content.data.memories.length, 2);
