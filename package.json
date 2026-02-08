@@ -1,24 +1,22 @@
 {
   "name": "just-memory",
-  "version": "0.5.0",
+  "version": "4.3.2",
   "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist-v2.1/just-memory-v2.1.js",
+  "types": "dist-v2.1/just-memory-v2.1.d.ts",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc",
-    "build:watch": "tsc --watch",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "test": "npm run build && tsx --test tests/**/*.test.ts",
-    "test:memory": "npm run build && tsx --test tests/memory/*.test.ts",
-    "test:filesystem": "npm run build && tsx --test tests/filesystem/*.test.ts",
-    "test:quick": "tsx --test tests/**/*.test.ts",
+    "build": "tsc -p tsconfig.v2.1.json",
+    "build:watch": "tsc -p tsconfig.v2.1.json --watch",
+    "start": "node dist-v2.1/just-memory-v2.1.js",
+    "dev": "tsx src/just-memory-v2.1.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "test:quick": "tsx --test tests/config.test.ts tests/validation.test.ts",
     "test:deps": "node -e \"console.log('Dependencies loaded successfully')\"",
     "lint": "eslint src/",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist-v2.1"
   },
   "keywords": [
     "mcp",
@@ -32,20 +30,37 @@
   ],
   "author": "Voork1144",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Voork1144/Just-Memory.git"
+  },
+  "homepage": "https://github.com/Voork1144/Just-Memory",
+  "bugs": {
+    "url": "https://github.com/Voork1144/Just-Memory/issues"
+  },
+  "files": [
+    "dist-v2.1/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@vscode/ripgrep": "^1.15.9",
     "@xenova/transformers": "^2.17.2",
     "better-sqlite3": "^12.6.2",
-    "node-pty": "^1.1.0",
-    "sharp": "^0.34.5",
-    "sqlite-vec": "^0.1.7-alpha.2",
+    "sqlite-vec": "^0.1.7-alpha.2"
+  },
+  "optionalDependencies": {
     "sqlite-vec-linux-x64": "^0.1.7-alpha.2",
-    "zod": "^3.23.8"
+    "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
+    "sqlite-vec-win32-x64": "^0.1.7-alpha.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.30",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
     "rimraf": "^5.0.10",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

@@ -518,15 +518,68 @@ Proposed Tools:
 - memory_batch_tag([ids], tags)
 ```
 
-### 9.4 Advanced Filtering
+### 9.4 Advanced Filtering / Query Operators
 ```
-Proposed:
-- Filter by confidence range
-- Filter by strength/decay status
-- Filter by emotional valence
-- Filter by relationship type
-- Compound filters with AND/OR
+Source: Chroma MCP comparison (Feb 2026)
+Status: Not implemented
+Priority: LOW - marginally useful at current scale (~1K memories)
+
+CHROMA-STYLE QUERY OPERATORS:
+Chroma supports advanced query operators that Just-Memory lacks:
+
+Comparison operators:
+- $gt, $gte, $lt, $lte (greater/less than)
+- $eq, $ne (equal/not equal)
+- $in, $nin (in/not in array)
+
+Logical operators:
+- $and, $or (compound filters)
+
+Document content filters:
+- $contains, $not_contains (substring match)
+- $regex, $not_regex (pattern match)
+
+Example Chroma query:
+{
+  "where": {
+    "$and": [
+      {"confidence": {"$gt": 0.8}},
+      {"type": {"$eq": "decision"}}
+    ]
+  },
+  "where_document": {"$contains": "API"}
+}
+
+IMPLEMENTATION FEASIBILITY:
+- SQLite natively supports all comparison operators
+- LIKE '%pattern%' → $contains
+- GLOB / REGEXP extension → $regex
+- Requires: JSON query parser → SQL WHERE clause generator
+- Estimate: ~200-300 lines for robust implementation
+
+PRACTICAL ASSESSMENT (Feb 2026):
+At ~1,100 memories:
+- Compound queries save seconds, not hours
+- Claude can mentally filter search results
+- Query DSL adds complexity for Claude to learn/use correctly
+- Would become more useful at 10K+ memories
+
+POTENTIALLY USEFUL QUERIES:
+- confidence > 0.8 → find reliable memories
+- created_at > '2025-01-01' → recent memories only
+- importance > 0.7 AND type = 'decision' → high-value decisions
+- type IN ('fact', 'procedure') → specific memory types
+
+VERDICT: Defer until memory count grows 10x. Current workarounds:
+- memory_list already returns recent memories
+- memory_search results can be filtered by Claude
+- Tags provide categorical filtering
+
+Proposed Tools (when implemented):
+- memory_query(filter_json) - Chroma-style query interface
+- OR extend memory_search with optional 'where' parameter
 ```
+
 
 ---
 
@@ -1662,3 +1715,171 @@ Claude Desktop App for EvoSteward GUI
 ---
 
 *Section compiled from analysis of EvoSteward development conversations, January 16-25, 2026.*
+
+
+---
+
+## 14. Quick Ideas / Inbox
+
+> **Auto-generated section** for ideas captured via `/idea` command.  
+> Review periodically and promote to appropriate sections above.
+
+---
+
+### 14.1 Embedded Specialized Memory/Archivist LLM
+```
+Added: 2026-02-04
+Priority: P2
+Status: Not implemented
+Source: Chat conversation
+Related: 
+  - MemGPT architecture (arXiv:2310.05265) - uses small LLM for memory management
+  - Anthropic's "Building Effective Agents" - tool-using agent patterns
+  - mcp-memory-service (doobidoo) - uses Haiku for extraction/consolidation
+  - Cognee, Letta - memory-first agent frameworks
+  - Local LLM options: Llama 3.2 1B/3B, Phi-3 mini, Qwen 2.5 0.5B/1.5B
+
+CONCEPT:
+Embed a small, specialized LLM directly into the Just-Memory MCP server that handles:
+- Automatic memory extraction from conversations
+- Memory consolidation and summarization
+- Contradiction detection and resolution suggestions
+- Query understanding and expansion
+- Importance/relevance scoring
+
+WHY THIS IS INTERESTING:
+- Current Just-Memory is passive (stores what Claude explicitly sends)
+- An embedded LLM could actively process and organize memories
+- Small models (1-3B params) can run locally with minimal overhead
+- Specialization via fine-tuning on memory management tasks
+- Reduces load on primary LLM (Claude) for memory housekeeping
+
+ARCHITECTURE OPTIONS:
+1. Sidecar process: Separate process, communicates via IPC
+2. Embedded runtime: ONNX/llama.cpp directly in Node.js
+3. Local API: Ollama/LM Studio running separately
+4. Hybrid: Use for background tasks, Claude for complex reasoning
+
+POTENTIAL CAPABILITIES:
+- Auto-extract facts from conversation transcripts
+- Nightly consolidation ("dream" processing)
+- Smart deduplication (semantic, not just text match)
+- Proactive contradiction flagging
+- Query-time memory ranking/reranking
+- Natural language → structured memory conversion
+
+CHALLENGES:
+- Latency budget (MCP should respond fast)
+- Resource usage on user's machine
+- Quality vs speed tradeoff
+- Training data for specialization
+- Graceful degradation if LLM unavailable
+
+PRIOR ART:
+- MemGPT: Inner/outer memory loops with smaller model managing memory
+- mcp-memory-service: Uses Claude Haiku for extraction hooks
+- Cognee: Memory-aware agent framework
+- AutoGen/CrewAI: Multi-agent with specialized roles
+```
+
+
+
+---
+
+### 14.2 Tool Usage Logging & History
+```
+Added: 2026-02-05
+Priority: P1
+Status: Not implemented
+Source: Chat conversation
+Related:
+  - Desktop Commander: get_usage_stats, get_recent_tool_calls (reference implementation)
+  - Multi-instance coordination use case
+  - Crash recovery / session continuity
+
+CONCEPT:
+Log every MCP tool call with timestamp, arguments, output (truncated), success/failure, 
+and duration. Provide tools to query this history for debugging, recovery, and handoffs.
+
+WHY P1 - CRASH RECOVERY:
+After a reset or crash, Claude currently has no way to know what was done:
+- Transcripts may be huge or unavailable
+- Memories only show what was *stored*, not what was *attempted*
+- User may not remember either
+
+With tool logging, recovery is instant:
+  memory_tool_history(limit=20)
+  → See exactly what operations were performed, in order, with results
+
+USE CASES:
+1. Crash recovery - resume mid-task by seeing last operations
+2. Multi-instance handoff - Instance B queries what Instance A did
+3. Debug failures - see exact call that failed + error message
+4. Avoid duplicate work - check if operation was already completed
+5. Session continuity - query recent history vs writing manual handoffs
+6. Usage analytics - which tools are used most, success rates
+
+IMPLEMENTATION:
+
+1. Database schema:
+   CREATE TABLE tool_calls (
+     id TEXT PRIMARY KEY,
+     tool_name TEXT NOT NULL,
+     arguments TEXT,           -- JSON stringified
+     output TEXT,              -- JSON stringified, truncated to ~1KB
+     success INTEGER,          -- 0 or 1
+     error TEXT,               -- error message if failed
+     duration_ms INTEGER,
+     project_id TEXT,
+     timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+   );
+   CREATE INDEX idx_tool_calls_timestamp ON tool_calls(timestamp DESC);
+   CREATE INDEX idx_tool_calls_tool ON tool_calls(tool_name);
+
+2. Wrapper function for all tool handlers:
+   async function loggedToolCall(toolName, args, handler) {
+     const start = Date.now();
+     const id = generateId();
+     try {
+       const result = await handler(args);
+       await db.run(`INSERT INTO tool_calls ...`, {
+         id, toolName, args: JSON.stringify(args),
+         output: truncate(JSON.stringify(result), 1024),
+         success: 1, duration_ms: Date.now() - start
+       });
+       return result;
+     } catch (error) {
+       await db.run(`INSERT INTO tool_calls ...`, {
+         id, toolName, args: JSON.stringify(args),
+         error: error.message, success: 0, duration_ms: Date.now() - start
+       });
+       throw error;
+     }
+   }
+
+3. New tools:
+   
+   memory_tool_stats:
+   - Total calls per tool
+   - Success/failure rates
+   - Average duration
+   - Optional time range filter
+   
+   memory_tool_history:
+   - Recent calls in chronological order
+   - Filter by: tool_name, success/failure, time range
+   - Limit parameter (default 20, max 100)
+   - Returns: tool, args, output preview, success, error, timestamp
+
+ESTIMATED EFFORT: 2-4 hours
+- Schema + migration: 30 min
+- Wrapper implementation: 1 hour
+- Two new tools: 1-2 hours
+- Testing: 30 min
+
+CONSIDERATIONS:
+- Storage growth: ~500 bytes per call, prune after 7 days or 10K records
+- Don't log sensitive args (future: redaction patterns)
+- Output truncation to prevent bloat
+- Self-logging: should memory_tool_history log itself? (probably not)
+```

@@ -24,13 +24,14 @@
   },
   "include": ["src/**/*"],
   "exclude": [
-    "node_modules", 
-    "dist", 
+    "node_modules",
+    "dist",
     "**/*.test.ts",
-    "src/just-memory*.ts",
     "src/index.ts",
     "src/filesystem/**",
     "src/terminal/**",
-    "src/search/**"
+    "src/search/**",
+    "src/just-memory-v1*.ts",
+    "src/just-memory-v2.0.ts"
   ]
 }

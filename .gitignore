@@ -5,3 +5,13 @@ node_modules/
 *.db-wal
 *.tsbuildinfo
 .ruff_cache/
+dist-v2.1/
+*.py
+*.bak
+*.backup.js
+HANDOFF_*.md
+HANDOFF.md
+AUDIT_REPORT.md
+TODO.md
+oldfiles/
+.qdrant-initialized

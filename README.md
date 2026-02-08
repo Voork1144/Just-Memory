@@ -1,287 +1,176 @@
-# Just-Memory v1.7
+# Just-Memory v4.3.2
 
-> A focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, confidence scoring, and session context for Claude Desktop.
+> A persistent memory MCP server for Claude Desktop and Claude Code — semantic search, knowledge graphs, confidence scoring, contradiction detection, and session context across conversations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io/)
+[![Tests](https://img.shields.io/badge/Tests-411%20passing-brightgreen.svg)](#build-from-source)
 
-## Why Just-Memory?
+## What It Does
 
-Claude forgets everything between sessions. Just-Memory solves this by providing:
+Claude forgets everything between sessions. Just-Memory provides 23 tools that give Claude persistent memory:
 
-- **Persistent Memory** - Store facts, preferences, decisions that survive across conversations
-- **Confidence Scoring** - Track reliability with confirmation/contradiction support
-- **Knowledge Graph Entities** - Create named entities with observations and relations
-- **Bi-Temporal Queries** - Track when facts were valid, not just when stored
-- **Working Memory** - Session-scoped scratchpad with TTL support
-- **Session Briefings** - Auto-generate context summaries at session start
-
-## Features
-
-### 🧠 Core Memory (7 tools)
-- Store facts, events, observations, preferences, notes, and decisions
-- Auto-contradiction detection on store
-- SQL injection protection
-- Content validation (100KB max)
-- Ebbinghaus decay curves for memory strength
-
-### 🎯 Confidence Scoring (3 tools)
-- Track confirming sources (increases confidence)
-- Record contradictions (decreases confidence)
-- Filter by confidence threshold
-- Automatic confidence adjustment over time
-
-### ⏰ Bi-Temporal Edges (3 tools)
-- Create temporal relationships between memories
-- Query relationships as of specific dates
-- Invalidate edges with end dates
-
-### 🔍 Graph Traversal (1 tool)
-- Spreading activation algorithm
-- Configurable decay, hops, and thresholds
-
-### 📋 Working Memory / Scratchpad (5 tools)
-- Session-scoped key-value storage
-- Optional TTL (time-to-live)
-- Automatic expiry cleanup
-
-### 🏷️ Knowledge Graph Entities (6 tools) - NEW in v1.7
-- Create named entities (people, projects, concepts)
-- Add observations to entities
-- Create relations between entities (active voice)
-- Search entities by name or observations
-- Full relation traversal
-
-### 📊 Session Context (1 tool)
-- Generate briefings with recent context, key facts, and entities
+- **Semantic search** — e5-large-v2 embeddings (1024-dim) with HNSW indexing via sqlite-vec
+- **Knowledge graph** — Named entities with observations, typed relations, and temporal edges
+- **Confidence scoring** — Confirmation/contradiction tracking with DeBERTa-v3 NLI (lazy-loaded)
+- **Session context** — Crash recovery, task tracking, and auto-briefings at session start
+- **Chat ingestion** — Import conversation history from Claude Code and Claude Desktop
+- **Background consolidation** — Automatic decay, strengthening, and cleanup during idle time
 
 ## Installation
 
 ### Prerequisites
+
 - Node.js 18+
-- Claude Desktop
+- Claude Desktop or Claude Code
 
 ### Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/Voork1144/Just-Memory.git
 cd Just-Memory
-
-# Install dependencies
 npm install
-
-# Build v1.7
-npx tsc -p tsconfig.v1.7.json
+npm run build
 ```
 
 ### Claude Desktop Configuration
 
-Add to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+Add to your Claude Desktop config file:
+
+| Platform | Config Path |
+|----------|-------------|
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
+| **Linux** | `~/.config/Claude/claude_desktop_config.json` |
+| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
 ```json
 {
   "mcpServers": {
     "just-memory": {
       "command": "node",
-      "args": ["C:/Users/YOUR_USERNAME/Desktop/Project/Just-Memory/dist-v1.7/just-memory-v1.7.js"]
+      "args": ["/path/to/Just-Memory/dist-v2.1/just-memory-v2.1.js"]
     }
   }
 }
 ```
 
-Restart Claude Desktop after configuration.
+Replace `/path/to/Just-Memory` with the actual path where you cloned the repository. Restart Claude Desktop after configuration.
 
-## Tools Reference (26 tools)
+## Tools (23)
 
 ### Core Memory (7 tools)
 
 | Tool | Description |
 |------|-------------|
-| `memory_store` | Store memory with auto-contradiction detection (max 100KB) |
+| `memory_store` | Store memory with auto-contradiction detection |
 | `memory_recall` | Retrieve by ID (strengthens memory) |
 | `memory_update` | Update content, type, tags, importance, or confidence |
-| `memory_search` | Search with confidence filtering (SQL-injection safe) |
+| `memory_search` | Hybrid keyword + semantic search |
 | `memory_list` | List recent memories with filters |
 | `memory_delete` | Soft or permanent delete |
-| `memory_stats` | Get statistics including entity counts |
+| `memory_find_contradictions` | Check content for conflicts before storing |
 
-### Confidence Management (3 tools)
+### Unified Tools (action parameter selects operation)
 
-| Tool | Description |
-|------|-------------|
-| `memory_confirm` | Add confirming source (increases confidence) |
-| `memory_contradict` | Record contradiction (decreases confidence) |
-| `memory_confident` | Get high-confidence memories above threshold |
+| Tool | Actions | Purpose |
+|------|---------|---------|
+| `memory_confidence` | confirm, contradict | Manage memory confidence levels |
+| `memory_entity` | create, get, link, search, observe, delete | Knowledge graph entities |
+| `memory_edge` | create, query, invalidate | Temporal relationships between memories |
+| `memory_scratch` | set, get, delete, list, clear | Working memory / scratchpad |
+| `memory_task` | set, update, clear, get | Track current task for context recovery |
+| `memory_scheduled` | create, list, check, complete, cancel | Future task scheduling |
+| `memory_contradictions` | scan, pending, resolve | Contradiction resolution |
+| `memory_backup` | create, restore, list | Backup and restore |
+| `memory_project` | list, set | Project context management |
+| `memory_chat` | discover, ingest, search, stats | Chat history ingestion |
 
-### Bi-Temporal Edges (3 tools)
+### Other Tools
 
-| Tool | Description |
-|------|-------------|
-| `memory_edge_create` | Create temporal relationship between memories |
-| `memory_edge_query` | Query relationships with direction/type/date filters |
-| `memory_edge_invalidate` | Invalidate edge (set end date) |
+| Tool | Purpose |
+|------|---------|
+| `memory_stats` | Memory statistics and counts |
+| `memory_briefing` | Session briefing — call at session start |
+| `memory_suggest` | Context-based memory suggestions |
+| `memory_tool_history` | View recent tool calls |
+| `memory_health` | System health check |
+| `memory_rebuild_embeddings` | Backfill or rebuild embedding vectors |
 
-### Graph Traversal (1 tool)
+## Memory Types
 
-| Tool | Description |
-|------|-------------|
-| `memory_graph_traverse` | Spreading activation traversal from seed memories |
+`fact`, `event`, `observation`, `preference`, `note`, `decision`, `procedure`
 
-### Working Memory / Scratchpad (5 tools)
+## Environment Variables
 
-| Tool | Description |
-|------|-------------|
-| `memory_scratch_set` | Set value with optional TTL (seconds) |
-| `memory_scratch_get` | Get value (auto-expires if TTL passed) |
-| `memory_scratch_delete` | Delete specific key |
-| `memory_scratch_clear` | Clear all scratchpad |
-| `memory_scratch_list` | List all keys with expiry info |
+All optional. Configure via your shell or in the Claude Desktop config `env` block.
 
-### Session Context (1 tool)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JUST_MEMORY_EMBEDDING` | `large` | Embedding model size: `large` (1024-dim e5-large-v2) or `small` (384-dim e5-small-v2) |
+| `JUST_MEMORY_SUMMARIZER` | `Xenova/distilbart-cnn-12-6` | Summarization model for chat ingestion |
+| `JUST_MEMORY_QDRANT` | `true` | Enable Qdrant vector DB for 1M+ memory scale. Set `false` to use sqlite-vec only |
+| `JUST_MEMORY_QDRANT_PORT` | `6333` | Qdrant gRPC port |
+| `JUST_MEMORY_QDRANT_BINARY` | `~/.just-memory/qdrant/bin/qdrant` | Path to Qdrant binary |
+| `JUST_MEMORY_MAX_WRITERS` | `1` | Max concurrent SQLite writers (WAL mode) |
+| `JUST_MEMORY_PROJECT` | *(auto-detected)* | Default project ID. Also reads `CLAUDE_PROJECT` |
 
-| Tool | Description |
-|------|-------------|
-| `memory_briefing` | Generate session briefing with memories and entities |
+Example with environment variables:
 
-### Knowledge Graph Entities (6 tools) - NEW in v1.7
-
-| Tool | Description |
-|------|-------------|
-| `memory_entity_create` | Create/update entity with observations (merges if exists) |
-| `memory_entity_get` | Get entity by name with all relations |
-| `memory_entity_link` | Create relation between entities (active voice) |
-| `memory_entity_search` | Search entities by name or observation content |
-| `memory_entity_observe` | Add observations to existing entity |
-| `memory_entity_delete` | Delete entity and all its relations |
-
-## Usage Examples
-
-### Store and Search Memories
-
-```javascript
-// Store a preference
-memory_store({ 
-  content: "User prefers TypeScript over JavaScript", 
-  type: "preference", 
-  importance: 0.9,
-  confidence: 0.8
-})
-
-// Search memories
-memory_search({ query: "TypeScript", confidenceThreshold: 0.5 })
-
-// Get session briefing
-memory_briefing({ maxTokens: 500 })
+```json
+{
+  "mcpServers": {
+    "just-memory": {
+      "command": "node",
+      "args": ["/path/to/Just-Memory/dist-v2.1/just-memory-v2.1.js"],
+      "env": {
+        "JUST_MEMORY_EMBEDDING": "small",
+        "JUST_MEMORY_QDRANT": "false"
+      }
+    }
+  }
+}
 ```
 
-### Confidence Management
+## Architecture
 
-```javascript
-// Confirm a memory (increases confidence)
-memory_confirm({ id: "abc123", sourceId: "def456" })
+23 TypeScript source modules with dependency injection via a `ToolDispatch` interface:
 
-// Record contradiction (decreases confidence)
-memory_contradict({ id: "abc123" })
+- **Orchestrator** (`just-memory-v2.1.ts`) — MCP server lifecycle, DB setup, consolidation timer
+- **Business logic** — `memory.ts`, `search.ts`, `entities.ts`, `contradiction.ts`, `consolidation.ts`, `chat-ingestion.ts`, `session.ts`
+- **Infrastructure** — `write-lock.ts` (async FIFO mutex), `vector-store.ts` (Qdrant/sqlite-vec abstraction), `models.ts` (lazy ML loading), `schema.ts` (migrations)
+- **Extracted modules** — `tool-handlers.ts`, `tool-definitions.ts`, `scheduled-tasks.ts`, `backup.ts`, `contradiction-resolution.ts`, `tool-logging.ts`, `stats.ts`
+- **Shared** — `config.ts` (constants/thresholds), `validation.ts` (input sanitization)
 
-// Get only high-confidence memories
-memory_confident({ confidenceThreshold: 0.7, limit: 10 })
+Storage: SQLite with WAL mode at `~/.just-memory/memories.db`. Backups in `~/.just-memory/backups/`.
+
+## Build from Source
+
+```bash
+# Build
+npm run build
+
+# Test (411 tests)
+npm test
+
+# Dev mode (hot reload)
+npm run dev
+
+# Quick test (config + validation only)
+npm run test:quick
 ```
 
-### Knowledge Graph Entities (NEW in v1.7)
+## Updating
 
-```javascript
-// Create entities
-memory_entity_create({ 
-  name: "Eric", 
-  entityType: "person", 
-  observations: ["LLM Engineer", "EvoSteward creator"] 
-})
-
-memory_entity_create({ 
-  name: "EvoSteward", 
-  entityType: "project", 
-  observations: ["Commons-first meta-agent", "Uses Redis"] 
-})
-
-// Create relations (active voice)
-memory_entity_link({ from: "Eric", to: "EvoSteward", relationType: "created" })
-
-// Get entity with all relations
-memory_entity_get({ name: "Eric" })
-// Returns: { name, entityType, observations, relations: { outgoing, incoming } }
-
-// Search entities
-memory_entity_search({ query: "LLM", entityType: "person" })
-
-// Add more observations
-memory_entity_observe({ name: "Eric", observations: ["Lives in Montreal"] })
+```bash
+cd Just-Memory
+git pull
+npm install
+npm run build
 ```
 
-### Working Memory
-
-```javascript
-// Store temporary value with 1-hour TTL
-memory_scratch_set({ key: "current_task", value: "Debugging v1.7", ttlSeconds: 3600 })
-
-// Retrieve value
-memory_scratch_get({ key: "current_task" })
-
-// List all scratchpad keys
-memory_scratch_list({})
-```
-
-## Database Schema
-
-```sql
--- Core memories with confidence tracking
-memories (id, content, type, tags, importance, strength, 
-          access_count, confidence, source_count, contradiction_count,
-          created_at, last_accessed, deleted_at)
-
--- Bi-temporal edges between memories
-edges (id, from_id, to_id, relation_type, 
-       valid_from, valid_to, confidence, metadata, created_at)
-
--- Working memory / scratchpad
-scratchpad (key, value, expires_at, created_at)
-
--- Knowledge graph entities (NEW in v1.7)
-entities (id, name UNIQUE, entity_type, observations JSON, 
-          created_at, updated_at)
-
--- Entity relations (NEW in v1.7)
-entity_relations (id, from_entity, to_entity, relation_type, created_at)
-```
-
-## Version History
-
-| Version | Date | Tools | Key Features |
-|---------|------|-------|--------------|
-| v1.0 | Jan 2026 | 6 | Core CRUD, Ebbinghaus decay |
-| v1.5 | Jan 2026 | 19 | Confidence, bi-temporal, scratchpad |
-| v1.6 | Jan 24 | 20 | SQL injection fix, memory_update |
-| **v1.7** | **Jan 24** | **26** | **Knowledge Graph Entity Layer** |
-
-## EvoSteward Integration
-
-Just-Memory v1.7 provides the entity-based knowledge graph that EvoSteward's cognitive engine requires:
-
-| EvoSteward Need | Just-Memory Tool |
-|-----------------|------------------|
-| Create entities | `memory_entity_create` |
-| Entity relations | `memory_entity_link` |
-| Query entities | `memory_entity_get`, `memory_entity_search` |
-| Add observations | `memory_entity_observe` |
-
-**Shared Database**: `~/.just-memory/memories.db` (WAL mode for concurrent access)
+Then restart Claude Desktop or Claude Code to pick up the changes.
 
 ## License
 
-MIT © Voork1144
-
-## Acknowledgments
-
-- [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
-- Research on 100+ MCP memory servers that informed this design
+MIT

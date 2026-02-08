@@ -1,2 +1,0 @@
-Test file from Just-Command write_file tool
-Created and edited during Session 11 testing

@@ -1,0 +1,25 @@
+# Source & dev files
+src/
+tests/
+oldfiles/
+docs/
+.cache/
+.ruff_cache/
+.git/
+
+# Build artifacts that shouldn't ship
+dist-v2.1/*.py
+dist-v2.1/*.bak
+dist-v2.1/*.backup.js
+
+# Dev config
+tsconfig.json
+tsconfig.v2.1.json
+tsconfig.v2.1.tsbuildinfo
+eslint.config.mjs
+
+# Internal docs
+HANDOFF_*.md
+TODO.md
+CLAUDE.md
+CRASH_TEST_HANDOFF.md

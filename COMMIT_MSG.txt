@@ -1,5 +1,0 @@
-fix: add missing isBinaryBuffer and detectEncoding exports
-
-- Added isBinaryBuffer alias for appearsToBeBinary (for filesystem/read.ts compatibility)
-- Added detectEncoding function with BOM detection
-- Server now starts successfully with all 23 tools

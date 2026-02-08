@@ -5,7 +5,7 @@
     "moduleResolution": "node",
     "outDir": "./dist-v2.1",
     "rootDir": "./src",
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -14,6 +14,6 @@
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src/just-memory-v2.1.ts"],
-  "exclude": ["node_modules", "dist", "dist-*"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-*", "oldfiles/**", "tests/**"]
 }
