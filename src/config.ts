@@ -150,6 +150,7 @@ export const DECAY_CONSTANT = 0.5;
 // ============================================================================
 // Qdrant Config
 // ============================================================================
+export const QDRANT_VERSION = '1.16.3';
 export const QDRANT_ENABLED = process.env.JUST_MEMORY_QDRANT !== 'false';
 const _rawPort = parseInt(process.env.JUST_MEMORY_QDRANT_PORT || '6333', 10);
 export const QDRANT_PORT = (_rawPort >= 1 && _rawPort <= 65535) ? _rawPort : 6333;

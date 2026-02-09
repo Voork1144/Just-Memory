@@ -20,6 +20,7 @@
     "test:deps": "node -e \"console.log('Dependencies loaded successfully')\"",
     "lint": "eslint src/",
     "clean": "rimraf dist",
+    "postinstall": "node scripts/download-qdrant.mjs",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -52,6 +53,7 @@
   "files": [
     "dist/**/*.js",
     "dist/**/*.d.ts",
+    "scripts/download-qdrant.mjs",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"
@@ -65,7 +67,12 @@
   "optionalDependencies": {
     "sqlite-vec-linux-x64": "0.1.7-alpha.2",
     "sqlite-vec-darwin-arm64": "0.1.7-alpha.2",
-    "sqlite-vec-win32-x64": "0.1.7-alpha.2"
+    "sqlite-vec-win32-x64": "0.1.7-alpha.2",
+    "@just-memory/qdrant-linux-x64": "1.16.3",
+    "@just-memory/qdrant-linux-arm64": "1.16.3",
+    "@just-memory/qdrant-darwin-x64": "1.16.3",
+    "@just-memory/qdrant-darwin-arm64": "1.16.3",
+    "@just-memory/qdrant-win32-x64": "1.16.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -150,6 +150,8 @@ TypeScript source modules with dependency injection via a `ToolDispatch` interfa
 
 Storage: SQLite with WAL mode at `~/.just-memory/memories.db`. Backups in `~/.just-memory/backups/`.
 
+**Vector search**: Uses sqlite-vec by default. Optionally uses [Qdrant](https://qdrant.tech) as a local sidecar process for better performance at scale. The Qdrant binary is bundled via platform-specific npm packages (`@just-memory/qdrant-{platform}`) and auto-installed with `npm install`. If the binary is unavailable, a fallback download runs automatically. Set `JUST_MEMORY_QDRANT=false` to disable Qdrant, or `JUST_MEMORY_QDRANT_BINARY=/path/to/qdrant` to use a custom binary.
+
 ## Build from Source
 
 ```bash

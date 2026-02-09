@@ -14,7 +14,8 @@
  */
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import type { VectorStore, VectorFilter, VectorResult, VectorMetadata } from './vector-store.js';
 import type {
   QdrantPoint, QdrantSearchResult, QdrantCollectionInfoResponse,
@@ -65,13 +66,14 @@ export class QdrantStore implements VectorStore {
   /** Start the Qdrant sidecar and initialize the collection */
   async start(): Promise<boolean> {
     try {
-      // Check if binary exists
-      if (!existsSync(this.opts.binaryPath)) {
-        console.error('[Just-Memory] Qdrant binary not found at', this.opts.binaryPath);
-        console.error('[Just-Memory] Install Qdrant: download from https://github.com/qdrant/qdrant/releases');
-        console.error('[Just-Memory] Place binary at:', this.opts.binaryPath);
+      // Resolve binary from multiple sources
+      const binaryPath = await this._resolveBinary();
+      if (!binaryPath) {
+        console.error('[Just-Memory] Qdrant binary not available, falling back to sqlite-vec');
         return false;
       }
+      // Update binaryPath for spawn
+      this.opts.binaryPath = binaryPath;
 
       // Check if Qdrant is already running on this port
       if (await this._healthCheck()) {
@@ -243,6 +245,49 @@ export class QdrantStore implements VectorStore {
   // ============================================================================
   // Private helpers
   // ============================================================================
+
+  /**
+   * Resolve Qdrant binary path from multiple sources:
+   * 1. JUST_MEMORY_QDRANT_BINARY env var (explicit override)
+   * 2. @just-memory/qdrant-{platform} optionalDependency (npm package)
+   * 3. Legacy manual location (~/.just-memory/qdrant/bin/qdrant)
+   * 4. Download from GitHub releases (lazy fallback)
+   */
+  private async _resolveBinary(): Promise<string | null> {
+    // 1. Explicit override via env var
+    if (process.env.JUST_MEMORY_QDRANT_BINARY) {
+      const p = process.env.JUST_MEMORY_QDRANT_BINARY;
+      if (existsSync(p)) return p;
+      console.error(`[Just-Memory] JUST_MEMORY_QDRANT_BINARY set but not found: ${p}`);
+    }
+
+    // 2. Installed optionalDependency (@just-memory/qdrant-linux-x64 etc.)
+    const platformPkg = `@just-memory/qdrant-${process.platform}-${process.arch}`;
+    try {
+      const require = createRequire(import.meta.url);
+      const pkgDir = dirname(require.resolve(`${platformPkg}/package.json`));
+      const binName = process.platform === 'win32' ? 'qdrant.exe' : 'qdrant';
+      const bin = join(pkgDir, 'bin', binName);
+      if (existsSync(bin)) return bin;
+    } catch { /* package not installed */ }
+
+    // 3. Legacy manual location
+    if (existsSync(this.opts.binaryPath)) return this.opts.binaryPath;
+
+    // 4. Download fallback
+    console.error('[Just-Memory] Qdrant binary not found, downloading...');
+    try {
+      // Dynamic import of .mjs script — resolve path relative to this file
+      const scriptUrl = new URL('../scripts/download-qdrant.mjs', import.meta.url);
+      const mod = await import(/* @vite-ignore */ scriptUrl.href) as { downloadQdrant: () => Promise<boolean> };
+      await mod.downloadQdrant();
+      if (existsSync(this.opts.binaryPath)) return this.opts.binaryPath;
+    } catch (err: unknown) {
+      console.error('[Just-Memory] Qdrant download failed:', err instanceof Error ? err.message : err);
+    }
+
+    return null;
+  }
 
   private async _healthCheck(): Promise<boolean> {
     try {
