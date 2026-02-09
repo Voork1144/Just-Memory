@@ -82,6 +82,11 @@ export class SqliteVecStore implements VectorStore {
     this._hnswReady = options.hnswReady || (() => false);
   }
 
+  /** Public accessor for backward-compat HNSWProvider adapter (avoids unsafe `as any` cast) */
+  public getHNSWSearch(): ((embedding: Float32Array, limit: number, efSearch: number) => string[]) | undefined {
+    return (this._hnswReady() && this._hnswSearch) ? this._hnswSearch : undefined;
+  }
+
   isReady(): boolean {
     return true; // sqlite-vec is always available if loaded
   }
@@ -194,11 +199,8 @@ export function toHNSWProvider(store: VectorStore): { isReady: () => boolean; se
       // Synchronous adapter — HNSW search was always sync, but VectorStore is async.
       // For backward compat, we use the underlying sync search if available.
       if (store instanceof SqliteVecStore) {
-        // Access the internal HNSW search directly
-        const sqlStore = store as any;
-        if (sqlStore._hnswReady() && sqlStore._hnswSearch) {
-          return sqlStore._hnswSearch(embedding, limit, _efSearch);
-        }
+        const hnswSearch = store.getHNSWSearch();
+        if (hnswSearch) return hnswSearch(embedding, limit, _efSearch);
       }
       return [];
     },

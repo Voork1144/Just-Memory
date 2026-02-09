@@ -91,7 +91,12 @@ describe('keywordSearch', () => {
     }
 
     const results = keywordSearch(db, 'unique_limit_term', project, 3, 0);
-    assert.ok(results.length <= 6, 'Should respect limit (with 2x buffer)');
+    assert.ok(results.length >= 1 && results.length <= 6, `Should return 1-6 results (limit 3 with 2x buffer), got ${results.length}`);
+    // Verify results have proper shape
+    for (const r of results) {
+      assert.ok(r.id, 'Each result should have an id');
+      assert.ok(typeof r.keywordScore === 'number', 'Each result should have a numeric keywordScore');
+    }
   });
 
   it('should respect project scoping', () => {

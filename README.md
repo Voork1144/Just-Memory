@@ -1,4 +1,4 @@
-# Just-Memory v4.3.3
+# Just-Memory v4.3.4
 
 > A persistent memory MCP server for Claude Desktop and Claude Code — semantic search, knowledge graphs, confidence scoring, contradiction detection, and session context across conversations.
 
@@ -150,7 +150,7 @@ Storage: SQLite with WAL mode at `~/.just-memory/memories.db`. Backups in `~/.ju
 # Build
 npm run build
 
-# Test (411 tests)
+# Test (436 tests)
 npm test
 
 # Dev mode (hot reload)

@@ -3,13 +3,27 @@
  * Embedding (e5-large-v2 or e5-small-v2) and NLI (DeBERTa-v3-base) model management.
  * Model choice controlled by JUST_MEMORY_EMBEDDING env var ('small' or 'large').
  */
-import { MODEL_CACHE, EMBEDDING_MODEL, EMBEDDING_DIM, NLI_MODEL, SUMMARIZATION_MODEL } from './config.js';
+import { MODEL_CACHE, EMBEDDING_MODEL, EMBEDDING_DIM, NLI_MODEL, SUMMARIZATION_MODEL, EMBEDDING_TIMEOUT_MS, NLI_TIMEOUT_MS, SUMMARIZATION_TIMEOUT_MS, SUMMARIZATION_MAX_INPUT_CHARS } from './config.js';
 
-let embedder: any = null;
+// Pipeline instances from @huggingface/transformers — typed as callable with dispose
+type PipelineInstance = {
+  (input: string, options?: Record<string, unknown>): Promise<{ data: ArrayLike<number> }>;
+  dispose?: () => void;
+};
+type ClassifierInstance = {
+  (input: string, labels: string[], options?: Record<string, unknown>): Promise<{ labels: string[]; scores: number[] }>;
+  dispose?: () => void;
+};
+type SummarizerInstance = {
+  (input: string, options?: Record<string, unknown>): Promise<Array<{ summary_text: string }>>;
+  dispose?: () => void;
+};
+
+let embedder: PipelineInstance | null = null;
 let embedderReady = false;
-let nliClassifier: any = null;
+let nliClassifier: ClassifierInstance | null = null;
 let nliReady = false;
-let summarizerInstance: any = null;
+let summarizerInstance: SummarizerInstance | null = null;
 let summarizerReady = false;
 
 export async function initEmbedder(): Promise<void> {
@@ -17,10 +31,10 @@ export async function initEmbedder(): Promise<void> {
   const modelName = EMBEDDING_MODEL.split('/').pop() || EMBEDDING_MODEL;
   console.error(`[Just-Memory] Pre-warming embedding model (${modelName}, ${EMBEDDING_DIM}-dim)...`);
   try {
-    const { pipeline, env } = await import('@xenova/transformers');
+    const { pipeline, env } = await import('@huggingface/transformers');
     env.cacheDir = MODEL_CACHE;
     env.localModelPath = MODEL_CACHE;
-    embedder = await pipeline('feature-extraction', EMBEDDING_MODEL, { quantized: true });
+    embedder = await pipeline('feature-extraction', EMBEDDING_MODEL, { dtype: 'q8' }) as unknown as PipelineInstance;
     embedderReady = true;
     console.error(`[Just-Memory] Embedding model ready (${modelName}, ${EMBEDDING_DIM}-dim)`);
   } catch (err) {
@@ -33,10 +47,10 @@ export async function initNLI(): Promise<void> {
   if (nliClassifier) return;
   console.error('[Just-Memory] Loading NLI model (DeBERTa-v3-base)...');
   try {
-    const { pipeline, env } = await import('@xenova/transformers');
+    const { pipeline, env } = await import('@huggingface/transformers');
     env.cacheDir = MODEL_CACHE;
     env.localModelPath = MODEL_CACHE;
-    nliClassifier = await pipeline('zero-shot-classification', NLI_MODEL);
+    nliClassifier = await pipeline('zero-shot-classification', NLI_MODEL) as unknown as ClassifierInstance;
     nliReady = true;
     console.error('[Just-Memory] NLI model ready (DeBERTa-v3-base)');
   } catch (err) {
@@ -49,10 +63,9 @@ export async function generateEmbedding(text: string): Promise<Float32Array | nu
   if (!embedderReady || !embedder) return null;
   try {
     const prefixedText = `query: ${text}`;
-    const timeoutMs = 15000;
     const result = await Promise.race([
       embedder(prefixedText, { pooling: 'mean', normalize: true }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Embedding timeout after 15s')), timeoutMs))
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Embedding timeout after ${EMBEDDING_TIMEOUT_MS}ms`)), EMBEDDING_TIMEOUT_MS))
     ]);
     return new Float32Array(result.data);
   } catch (err) {
@@ -74,14 +87,13 @@ export async function checkContradictionNLI(premise: string, hypothesis: string)
     return { isContradiction: false, confidence: 0, label: 'neutral' };
   }
   try {
-    const timeoutMs = 10000;
     const result = await Promise.race([
       nliClassifier(premise, [hypothesis], { multi_label: false }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('NLI timeout')), timeoutMs))
-    ]) as any;
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('NLI timeout')), NLI_TIMEOUT_MS))
+    ]);
 
-    const labels = result.labels as string[];
-    const scores = result.scores as number[];
+    const labels = result.labels;
+    const scores = result.scores;
 
     const contradictionIdx = labels.findIndex((l: string) =>
       l.toLowerCase().includes('contradict') || l.toLowerCase() === 'contradiction'
@@ -113,10 +125,10 @@ export async function initSummarizer(): Promise<void> {
   const modelName = SUMMARIZATION_MODEL.split('/').pop() || SUMMARIZATION_MODEL;
   console.error(`[Just-Memory] Loading summarization model (${modelName})...`);
   try {
-    const { pipeline, env } = await import('@xenova/transformers');
+    const { pipeline, env } = await import('@huggingface/transformers');
     env.cacheDir = MODEL_CACHE;
     env.localModelPath = MODEL_CACHE;
-    summarizerInstance = await pipeline('summarization', SUMMARIZATION_MODEL, { quantized: true });
+    summarizerInstance = await pipeline('summarization', SUMMARIZATION_MODEL, { dtype: 'q8' }) as unknown as SummarizerInstance;
     summarizerReady = true;
     console.error(`[Just-Memory] Summarization model ready (${modelName})`);
   } catch (err) {
@@ -134,14 +146,14 @@ export async function generateSummary(text: string, options?: {
   }
   if (!summarizerReady || !summarizerInstance) return null;
   try {
-    // Truncate to ~4000 chars to fit model context window
-    const truncated = text.slice(0, 4000);
+    // Truncate to fit model context window
+    const truncated = text.slice(0, SUMMARIZATION_MAX_INPUT_CHARS);
     const result = await Promise.race([
       summarizerInstance(truncated, {
         max_length: options?.max_length || 150,
         min_length: options?.min_length || 30,
       }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Summarization timeout after 30s')), 30000))
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Summarization timeout after ${SUMMARIZATION_TIMEOUT_MS}ms`)), SUMMARIZATION_TIMEOUT_MS))
     ]);
     return result[0].summary_text;
   } catch (err) {

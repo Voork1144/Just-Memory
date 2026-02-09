@@ -238,3 +238,51 @@ describe('Entity Type Hierarchy', () => {
     assert.ok(result.includedTypes.includes('test_child_type'), 'Should include child type');
   });
 });
+
+// ============================================================================
+// Entity Error Paths & Edge Cases (v4.3.4)
+// ============================================================================
+describe('Entity Error Paths', () => {
+  it('should handle observeEntity on non-existent entity', () => {
+    const result = observeEntity(db, 'NonexistentEntity_' + Date.now(), ['obs'], 'test-project');
+    assert.ok(result.error, 'Should return error for non-existent entity');
+  });
+
+  it('should handle deleteEntity on non-existent entity', () => {
+    const result = deleteEntity(db, 'NeverCreated_' + Date.now(), 'test-project');
+    assert.ok(result.error, 'Should return error for non-existent entity');
+  });
+
+  it('should allow linkEntities even when entity names do not exist in entities table', () => {
+    const project = `link-nocheck-${Date.now()}`;
+    // entity_relations has no FK to entities — names are just strings
+    const result = linkEntities(db, 'NonexistentSource', 'relates_to', 'NonexistentTarget', project);
+    assert.ok(result.linked, 'Should succeed (no FK constraint on entity_relations)');
+  });
+
+  it('should return alreadyExists for duplicate link', () => {
+    const project = `link-dup-${Date.now()}`;
+    createEntity(db, 'DupLinkA', 'concept', [], project);
+    createEntity(db, 'DupLinkB', 'concept', [], project);
+    linkEntities(db, 'DupLinkA', 'relates_to', 'DupLinkB', project);
+    const result = linkEntities(db, 'DupLinkA', 'relates_to', 'DupLinkB', project);
+    assert.ok(result.alreadyExists, 'Should detect duplicate link');
+  });
+
+  it('should search entities by type filter', () => {
+    const project = `search-type-${Date.now()}`;
+    createEntity(db, 'PersonEntity', 'person', ['is a person'], project);
+    createEntity(db, 'ConceptEntity', 'concept', ['is a concept'], project);
+    const personResults = searchEntities(db, 'Entity', 'person', project, 10);
+    assert.ok(personResults.length >= 1, 'Should find person entity');
+    assert.ok(personResults.every((e: any) => e.entityType === 'person'), 'All results should be person type');
+  });
+
+  it('should handle empty observation array in observeEntity', () => {
+    const project = `obs-empty-${Date.now()}`;
+    createEntity(db, 'EmptyObsEntity', 'concept', ['initial'], project);
+    const result = observeEntity(db, 'EmptyObsEntity', [], project);
+    assert.ok(!result.error);
+    assert.strictEqual(result.added, 0, 'Should add 0 observations');
+  });
+});

@@ -172,6 +172,21 @@ export const EMBEDDING_WORKER_INTERVAL_MS = 5000; // 5 seconds between batches
 // ============================================================================
 export const CONSOLIDATION_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 export const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes of inactivity
+export const CONSOLIDATION_HARD_TIMEOUT_MS = 300_000; // 5 minutes
+
+// ============================================================================
+// Model Timeouts
+// ============================================================================
+export const EMBEDDING_TIMEOUT_MS = 15_000;
+export const NLI_TIMEOUT_MS = 10_000;
+export const SUMMARIZATION_TIMEOUT_MS = 30_000;
+export const SUMMARIZATION_MAX_INPUT_CHARS = 4000;
+
+// ============================================================================
+// ReDoS Protection Caps
+// ============================================================================
+export const MAX_SENTENCE_LENGTH = 500;
+export const MAX_WORD_ARRAY_SIZE = 500;
 
 // ============================================================================
 // Tool Logging

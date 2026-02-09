@@ -1,5 +1,6 @@
+#!/usr/bin/env node
 /**
- * Just-Memory v4.3.3 — MCP Server Orchestrator (23 tools)
+ * Just-Memory v4.3.4 — MCP Server Orchestrator (23 tools)
  *
  * Thin orchestrator: DB setup, HNSW management, wrapper functions, consolidation timer,
  * MCP server lifecycle. All business logic extracted to 19 modules.
@@ -40,7 +41,8 @@ import {
   BACKUP_DIR, MODEL_CACHE, DB_DIR, DB_PATH, EMBEDDING_DIM,
   GLOBAL_PROJECT,
   CONTRADICTION_CONFIG,
-  CONSOLIDATION_INTERVAL_MS, IDLE_THRESHOLD_MS, TOOL_LOG_EXCLUDED,
+  CONSOLIDATION_INTERVAL_MS, IDLE_THRESHOLD_MS, CONSOLIDATION_HARD_TIMEOUT_MS,
+  TOOL_LOG_EXCLUDED,
   QDRANT_ENABLED, QDRANT_PORT, QDRANT_DATA_DIR, QDRANT_BINARY, QDRANT_COLLECTION,
   WRITE_LOCK_MAX_CONCURRENT,
   EMBEDDING_WORKER_BATCH_SIZE, EMBEDDING_WORKER_INTERVAL_MS,
@@ -652,7 +654,7 @@ function suggestFromContext(contextText: string, projectId?: string, limit = 10)
 // Track last activity time for idle detection
 let lastActivityTime = Date.now();
 let consolidationTimer: NodeJS.Timeout | null = null;
-let activeConsolidation: Promise<any> | null = null;
+let activeConsolidation: Promise<unknown> | null = null;
 // IDLE_THRESHOLD_MS, CONSOLIDATION_INTERVAL_MS imported from config.ts
 
 /**
@@ -680,6 +682,7 @@ function cleanExpiredScratchpad(projectId?: string) {
 /**
  * Run full consolidation cycle
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runConsolidation(projectId?: string): Promise<any> {
   const project = getEffectiveProject(projectId);
   
@@ -817,7 +820,10 @@ function startConsolidationTimer() {
 
   consolidationTimer = setInterval(() => {
     if (isIdle() && !activeConsolidation) {
-      activeConsolidation = runConsolidation()
+      activeConsolidation = Promise.race([
+        runConsolidation(),
+        new Promise(resolve => setTimeout(resolve, CONSOLIDATION_HARD_TIMEOUT_MS)) // 5-minute hard timeout
+      ])
         .catch((err: any) => {
           console.error('[Just-Memory v4.3] Background consolidation error:', err.message);
         })
@@ -914,7 +920,7 @@ function setCurrentProject(projectId: string, path?: string) {
 // MCP Server Setup
 // ============================================================================
 const server = new Server(
-  { name: 'just-memory', version: '4.3.3' },
+  { name: 'just-memory', version: '4.3.4' },
   { capabilities: { tools: {} } }
 );
 
@@ -922,6 +928,13 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: TOOLS
 }));
+
+/** Sanitize error messages before sending to MCP client — strips file paths and stack traces */
+function sanitizeErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  // Strip absolute file paths, keep first 200 chars
+  return raw.replace(/\/[^\s:]+/g, '[path]').slice(0, 200);
+}
 
 // ============================================================================
 // Tool Dispatch Object (wires monolith wrappers into extracted handler)
@@ -1004,7 +1017,7 @@ async function buildHealthInfo(): Promise<any> {
   const vectorCount = vectorStore?.isReady() ? await vectorStore.count() : 0;
   return {
     status: 'ok',
-    version: '4.3.3',
+    version: '4.3.4',
     session_id: CURRENT_SESSION_ID,
     uptime_seconds: Math.floor((Date.now() - sessionStartMs) / 1000),
     models: {
@@ -1177,7 +1190,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: error.message || String(error) }) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: sanitizeErrorMessage(error) }) }],
       isError: true
     };
   }

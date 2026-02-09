@@ -1,9 +1,12 @@
 {
   "name": "just-memory",
-  "version": "4.3.3",
+  "version": "4.3.4",
   "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
   "main": "dist-v2.1/just-memory-v2.1.js",
   "types": "dist-v2.1/just-memory-v2.1.d.ts",
+  "bin": {
+    "just-memory": "dist-v2.1/just-memory-v2.1.js"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
@@ -31,6 +34,7 @@
   ],
   "author": "Voork1144",
   "license": "MIT",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/Voork1144/Just-Memory.git"
@@ -39,15 +43,22 @@
   "bugs": {
     "url": "https://github.com/Voork1144/Just-Memory/issues"
   },
+  "exports": {
+    ".": {
+      "types": "./dist-v2.1/just-memory-v2.1.d.ts",
+      "default": "./dist-v2.1/just-memory-v2.1.js"
+    }
+  },
   "files": [
-    "dist-v2.1/",
+    "dist-v2.1/**/*.js",
+    "dist-v2.1/**/*.d.ts",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@xenova/transformers": "^2.17.2",
+    "@huggingface/transformers": "^3.8.0",
     "better-sqlite3": "^12.6.2",
     "sqlite-vec": "^0.1.7-alpha.2"
   },

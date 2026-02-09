@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import {
   CONTRADICTION_CONFIG, NEGATION_PATTERNS, FACTUAL_PATTERNS,
   EMBEDDING_DIM, ContradictionResult, ExtractedFact,
+  MAX_SENTENCE_LENGTH, MAX_WORD_ARRAY_SIZE,
 } from './config.js';
 import { generateEmbedding, checkContradictionNLI, getModelState } from './models.js';
 
@@ -22,7 +23,7 @@ export function extractFacts(text: string): ExtractedFact[] {
 
   for (const sentence of sentences) {
     const trimmed = sentence.trim();
-    if (trimmed.length > 500) continue; // ReDoS protection: skip very long sentences
+    if (trimmed.length > MAX_SENTENCE_LENGTH) continue; // ReDoS protection: skip very long sentences
 
     for (const pattern of FACTUAL_PATTERNS) {
       const match = trimmed.match(pattern);
@@ -271,7 +272,7 @@ export async function findContradictionsEnhanced(
   const contentFacts = extractFacts(content);
   const contentNegation = hasNegation(content);
   const contentLower = content.toLowerCase();
-  const contentWords = contentLower.split(/\W+/).filter(w => w.length > 3).slice(0, 500);
+  const contentWords = contentLower.split(/\W+/).filter(w => w.length > 3).slice(0, MAX_WORD_ARRAY_SIZE);
 
   // Get all active memories in project
   let sql = 'SELECT * FROM memories WHERE deleted_at IS NULL AND (project_id = ? OR project_id = \'global\')';
@@ -305,7 +306,7 @@ export async function findContradictionsEnhanced(
 
   for (const memory of allMemories) {
     const memoryLower = memory.content.toLowerCase();
-    const memoryWords = memoryLower.split(/\W+/).filter((w: string) => w.length > 3).slice(0, 500);
+    const memoryWords = memoryLower.split(/\W+/).filter((w: string) => w.length > 3).slice(0, MAX_WORD_ARRAY_SIZE);
 
     // Calculate word overlap
     const wordOverlap = contentWords.filter(w => memoryWords.includes(w)).length;

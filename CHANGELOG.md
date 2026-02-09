@@ -2,6 +2,35 @@
 
 All notable changes to Just-Memory are documented here.
 
+## [4.3.4] - 2026-02-08
+
+### Fixed
+- **Source maps shipped in npm package** — `package.json` `files` whitelist overrode `.npmignore`; changed to explicit `**/*.js` + `**/*.d.ts` globs (package 754KB -> 474KB)
+- **`toHNSWProvider` unsafe `as any` cast** — added `getHNSWSearch()` public accessor to `SqliteVecStore`
+- **MCP error responses leak file paths** — `sanitizeErrorMessage()` strips absolute paths and truncates to 200 chars
+- **Consolidation timer could hang forever** — wrapped in `Promise.race` with 5-minute hard timeout
+
+### Changed
+- **`@xenova/transformers` replaced with `@huggingface/transformers`** — Xenova fork abandoned May 2024; migrated to actively maintained `@huggingface/transformers` v3.8
+- **ESM module format** — `"type": "module"` in package.json, `"module": "NodeNext"` in tsconfig
+- **TypeScript target ES2022** — enables `Array.at()`, `Object.hasOwn()`, `Error.cause`, top-level `await`
+- **Global `any` types removed from models.ts** — `PipelineInstance`, `ClassifierInstance`, `SummarizerInstance` callable types
+- **Magic numbers extracted to config.ts** — `EMBEDDING_TIMEOUT_MS`, `NLI_TIMEOUT_MS`, `SUMMARIZATION_TIMEOUT_MS`, `MAX_SENTENCE_LENGTH`, `MAX_WORD_ARRAY_SIZE`, `CONSOLIDATION_HARD_TIMEOUT_MS`
+- **`activeConsolidation` typed as `Promise<unknown>`** instead of `Promise<any>`
+
+### Added
+- `bin` field in package.json — enables `npx just-memory`
+- `exports` field in package.json — explicit ESM entry point
+- Shebang (`#!/usr/bin/env node`) in entry point
+- `SECURITY.md` — vulnerability reporting policy
+- `npm audit` step in CI pipeline
+- 19 new tests: `vector-store.test.ts` (13), entity error paths (6), strengthened search assertions
+
+### Stats
+- 436 tests passing, 0 failures, 0 build errors
+
+---
+
 ## [4.3.3] - 2026-02-08
 
 ### Fixed
