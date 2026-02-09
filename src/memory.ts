@@ -11,8 +11,9 @@ import {
   type ContradictionResult,
 } from './config.js';
 import { generateEmbedding } from './models.js';
-import { validateContent, validateTags } from './validation.js';
+import { validateContent, validateTags, validateMemoryType, validateUnitRange } from './validation.js';
 import { EMBEDDING_DIM } from './config.js';
+import type { MemoryRow, MemoryIdContent, EdgeRowWithContent, MemorySummary } from './types.js';
 
 // ============================================================================
 // Retention & Strength
@@ -31,7 +32,7 @@ export function updateStrength(currentStrength: number, accessCount: number): nu
 // Confidence
 // ============================================================================
 
-export function calculateEffectiveConfidence(memory: any): number {
+export function calculateEffectiveConfidence(memory: MemoryRow): number {
   let conf = memory.confidence;
   const daysSince = (Date.now() - new Date(memory.last_accessed).getTime()) / 86400000;
   conf -= daysSince * CONFIDENCE_PENALTY.DECAY_PER_DAY;
@@ -44,7 +45,7 @@ export function calculateEffectiveConfidence(memory: any): number {
   return Math.max(floor, Math.min(1, conf));
 }
 
-export function assessConfidence(memory: any): { level: string; note?: string } {
+export function assessConfidence(memory: MemoryRow): { level: string; note?: string } {
   const conf = calculateEffectiveConfidence(memory);
   if (conf >= CONFIDENCE_LEVELS.HIGH) return { level: 'high' };
   if (conf >= CONFIDENCE_LEVELS.MEDIUM) return { level: 'medium' };
@@ -52,7 +53,7 @@ export function assessConfidence(memory: any): { level: string; note?: string } 
   return { level: 'uncertain', note: 'Low confidence - may need verification' };
 }
 
-export function toConfidentMemory(m: any) {
+export function toConfidentMemory(m: MemoryRow) {
   const assessment = assessConfidence(m);
   return {
     id: m.id,
@@ -91,7 +92,10 @@ export async function storeMemory(
   projectId: string
 ) {
   validateContent(content);
+  type = validateMemoryType(type);
   const validTags = validateTags(tags);
+  importance = validateUnitRange(importance, 0.5);
+  confidence = validateUnitRange(confidence, 0.5);
   const id = randomUUID().replace(/-/g, '');
 
   // Use enhanced contradiction detection
@@ -113,7 +117,7 @@ export async function storeMemory(
   const embeddingBuffer = embedding ? Buffer.from(new Uint8Array(embedding.buffer)) : null;
 
   if (!embeddingBuffer) {
-    console.error(`[Just-Memory v4.0] Warning: Embedding generation failed for memory ${id} - will be invisible to semantic search`);
+    console.error(`[Just-Memory] Warning: Embedding generation failed for memory ${id} - will be invisible to semantic search`);
   }
 
   // Wrap INSERT + contradiction edges in a transaction
@@ -172,7 +176,7 @@ export async function reembedOrphaned(
          AND (project_id = ? OR project_id = 'global')
        LIMIT ?`;
 
-  const orphaned = db.prepare(query).all(projectId, limit) as any[];
+  const orphaned = db.prepare(query).all(projectId, limit) as MemoryIdContent[];
 
   if (orphaned.length === 0) return 0;
 
@@ -184,8 +188,8 @@ export async function reembedOrphaned(
       if (embedding) {
         updates.push({ id: m.id, embedding: Buffer.from(new Uint8Array(embedding.buffer)) });
       }
-    } catch (err: any) {
-      console.error(`[Just-Memory v4.0] Re-embed failed for ${m.id}: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Just-Memory] Re-embed failed for ${m.id}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -198,19 +202,19 @@ export async function reembedOrphaned(
       }
     });
     batchUpdate(updates);
-    console.error(`[Just-Memory v4.0] Re-embedded ${updates.length}/${orphaned.length} orphaned memories`);
+    console.error(`[Just-Memory] Re-embedded ${updates.length}/${orphaned.length} orphaned memories`);
   }
   return updates.length;
 }
 
 export function recallMemory(db: Database.Database, id: string, projectId?: string) {
   let sql = 'SELECT * FROM memories WHERE id = ? AND deleted_at IS NULL';
-  const params: any[] = [id];
+  const params: (string | number)[] = [id];
   if (projectId) {
     sql += " AND (project_id = ? OR project_id = 'global')";
     params.push(projectId);
   }
-  const memory = db.prepare(sql).get(...params) as any;
+  const memory = db.prepare(sql).get(...params) as MemoryRow | undefined;
   if (!memory) return { error: 'Memory not found', id };
 
   const newStrength = updateStrength(memory.strength, memory.access_count);
@@ -219,7 +223,7 @@ export function recallMemory(db: Database.Database, id: string, projectId?: stri
   db.prepare(`UPDATE memories SET access_count = access_count + 1, strength = ?, confidence = ?, last_accessed = datetime('now') WHERE id = ?`)
     .run(newStrength, newConfidence, id);
 
-  const updated = db.prepare('SELECT * FROM memories WHERE id = ?').get(id) as any;
+  const updated = db.prepare('SELECT * FROM memories WHERE id = ?').get(id) as MemoryRow;
 
   // Get related contradictions
   const contradictionEdges = db.prepare(`
@@ -229,7 +233,7 @@ export function recallMemory(db: Database.Database, id: string, projectId?: stri
     WHERE (e.from_id = ? OR e.to_id = ?)
     AND e.relation_type LIKE 'contradiction_%'
     AND m.deleted_at IS NULL
-  `).all(id, id, id) as any[];
+  `).all(id, id, id) as EdgeRowWithContent[];
 
   return {
     ...toConfidentMemory(updated),
@@ -237,7 +241,7 @@ export function recallMemory(db: Database.Database, id: string, projectId?: stri
     importance: updated.importance, strength: updated.strength,
     access_count: updated.access_count, created_at: updated.created_at,
     last_accessed: updated.last_accessed,
-    contradictions: contradictionEdges.map((e: any) => ({
+    contradictions: contradictionEdges.map((e) => ({
       type: e.relation_type.replace('contradiction_', ''),
       otherMemoryId: e.from_id === id ? e.to_id : e.from_id,
       preview: e.other_content?.slice(0, 100),
@@ -263,16 +267,16 @@ export async function updateMemory(
   projectId?: string
 ) {
   let sql = 'SELECT * FROM memories WHERE id = ? AND deleted_at IS NULL';
-  const params: any[] = [id];
+  const params: (string | number)[] = [id];
   if (projectId) {
     sql += " AND (project_id = ? OR project_id = 'global')";
     params.push(projectId);
   }
-  const memory = db.prepare(sql).get(...params) as any;
+  const memory = db.prepare(sql).get(...params) as MemoryRow | undefined;
   if (!memory) return { error: 'Memory not found', id };
 
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | Buffer | null)[] = [];
   let newContradictions: ContradictionResult[] = [];
 
   if (updates.content !== undefined) {
@@ -309,10 +313,10 @@ export async function updateMemory(
     }
   }
 
-  if (updates.type !== undefined) { fields.push('type = ?'); values.push(updates.type); }
+  if (updates.type !== undefined) { fields.push('type = ?'); values.push(validateMemoryType(updates.type)); }
   if (updates.tags !== undefined) { fields.push('tags = ?'); values.push(JSON.stringify(validateTags(updates.tags))); }
-  if (updates.importance !== undefined) { fields.push('importance = ?'); values.push(Math.max(0, Math.min(1, updates.importance))); }
-  if (updates.confidence !== undefined) { fields.push('confidence = ?'); values.push(Math.max(0, Math.min(1, updates.confidence))); }
+  if (updates.importance !== undefined) { fields.push('importance = ?'); values.push(validateUnitRange(updates.importance, updates.importance)); }
+  if (updates.confidence !== undefined) { fields.push('confidence = ?'); values.push(validateUnitRange(updates.confidence, updates.confidence)); }
 
   if (fields.length === 0) return { error: 'No valid updates provided', id };
 
@@ -321,7 +325,7 @@ export async function updateMemory(
 
   db.prepare(`UPDATE memories SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 
-  const updated = db.prepare('SELECT * FROM memories WHERE id = ?').get(id) as any;
+  const updated = db.prepare('SELECT * FROM memories WHERE id = ?').get(id) as MemoryRow;
   return {
     id: updated.id, project_id: updated.project_id,
     content: updated.content.length > 200 ? updated.content.slice(0, 200) + '...' : updated.content,
@@ -340,12 +344,12 @@ export async function updateMemory(
 
 export function deleteMemory(db: Database.Database, id: string, permanent = false, projectId?: string) {
   let sql = 'SELECT * FROM memories WHERE id = ?';
-  const params: any[] = [id];
+  const params: (string | number)[] = [id];
   if (projectId) {
     sql += " AND (project_id = ? OR project_id = 'global')";
     params.push(projectId);
   }
-  const memory = db.prepare(sql).get(...params) as any;
+  const memory = db.prepare(sql).get(...params) as MemoryRow | undefined;
   if (!memory) return { error: 'Memory not found', id };
 
   if (permanent) {
@@ -370,7 +374,7 @@ export function listMemories(db: Database.Database, projectId: string, limit = 2
 
   sql += ' ORDER BY last_accessed DESC LIMIT ?';
 
-  const memories = db.prepare(sql).all(projectId, limit) as any[];
+  const memories = db.prepare(sql).all(projectId, limit) as MemoryRow[];
 
   return memories.map(m => ({
     id: m.id,
@@ -400,8 +404,8 @@ export function getBriefingMemories(
   projectId: string,
   coreLimit = 5,
   recentLimit = 5
-): { core: any[]; recent: any[] } {
-  const mapBriefingMemory = (m: any) => ({
+): { core: MemorySummary[]; recent: MemorySummary[] } {
+  const mapBriefingMemory = (m: MemoryRow) => ({
     id: m.id,
     project_id: m.project_id,
     content: m.content.length > 200 ? m.content.slice(0, 200) + '...' : m.content,
@@ -420,7 +424,7 @@ export function getBriefingMemories(
       AND importance >= 0.8
     ORDER BY importance DESC, confidence DESC
     LIMIT ?
-  `).all(projectId, coreLimit) as any[];
+  `).all(projectId, coreLimit) as MemoryRow[];
 
   const coreIds = new Set(coreMemories.map(m => m.id));
 
@@ -430,7 +434,7 @@ export function getBriefingMemories(
     WHERE (project_id = ? OR project_id = 'global')
       AND deleted_at IS NULL
   `;
-  const recentParams: any[] = [projectId];
+  const recentParams: (string | number)[] = [projectId];
 
   if (coreIds.size > 0) {
     const placeholders = Array.from(coreIds).map(() => '?').join(',');
@@ -441,7 +445,7 @@ export function getBriefingMemories(
   recentSql += ' ORDER BY last_accessed DESC LIMIT ?';
   recentParams.push(recentLimit);
 
-  const recentMemories = db.prepare(recentSql).all(...recentParams) as any[];
+  const recentMemories = db.prepare(recentSql).all(...recentParams) as MemoryRow[];
 
   return {
     core: coreMemories.map(mapBriefingMemory),
@@ -455,12 +459,12 @@ export function getBriefingMemories(
 
 export function confirmMemory(db: Database.Database, id: string, sourceId?: string, projectId?: string) {
   let sql = 'SELECT * FROM memories WHERE id = ? AND deleted_at IS NULL';
-  const params: any[] = [id];
+  const params: (string | number)[] = [id];
   if (projectId) {
     sql += " AND (project_id = ? OR project_id = 'global')";
     params.push(projectId);
   }
-  const memory = db.prepare(sql).get(...params) as any;
+  const memory = db.prepare(sql).get(...params) as MemoryRow | undefined;
   if (!memory) return { error: 'Memory not found', id };
 
   const newSourceCount = memory.source_count + 1;
@@ -483,12 +487,12 @@ export function confirmMemory(db: Database.Database, id: string, sourceId?: stri
 
 export function contradictMemory(db: Database.Database, id: string, contradictingId?: string, projectId?: string) {
   let sql = 'SELECT * FROM memories WHERE id = ? AND deleted_at IS NULL';
-  const params: any[] = [id];
+  const params: (string | number)[] = [id];
   if (projectId) {
     sql += " AND (project_id = ? OR project_id = 'global')";
     params.push(projectId);
   }
-  const memory = db.prepare(sql).get(...params) as any;
+  const memory = db.prepare(sql).get(...params) as MemoryRow | undefined;
   if (!memory) return { error: 'Memory not found', id };
 
   const newConfidence = Math.max(0, memory.confidence - CONFIDENCE_PENALTY.CONTRADICTION);

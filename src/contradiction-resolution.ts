@@ -1,11 +1,12 @@
 /**
- * Just-Memory v4.3 — Contradiction Resolution
+ * Just-Memory v5.0 — Contradiction Resolution
  * Pending resolutions, resolve actions, scanning, and auto-resolution.
  * Distinct from contradiction.ts (which handles *detection*).
  * Extracted from monolith — pure functions with db parameter injection.
  */
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+import type { PendingResolutionRow, ContradictionResolutionRow, ContradictionScanEdge, MemoryRow } from './types.js';
 
 // ============================================================================
 // Pure Helpers
@@ -58,7 +59,7 @@ export function getPendingResolutions(db: Database.Database, projectId: string, 
       AND (cr.project_id = ? OR cr.project_id = 'global')
     ORDER BY cr.created_at DESC
     LIMIT ?
-  `).all(projectId, limit) as any[];
+  `).all(projectId, limit) as PendingResolutionRow[];
 
   return {
     pending_count: resolutions.length,
@@ -81,7 +82,7 @@ export function resolveContradiction(
   note?: string,
   mergedContent?: string
 ) {
-  const resolution = db.prepare(`SELECT * FROM contradiction_resolutions WHERE id = ?`).get(resolutionId) as any;
+  const resolution = db.prepare(`SELECT * FROM contradiction_resolutions WHERE id = ?`).get(resolutionId) as ContradictionResolutionRow | undefined;
   if (!resolution) return { error: 'Resolution not found', resolutionId };
 
   if (resolutionType === 'merge' && !mergedContent) {
@@ -122,7 +123,7 @@ export function resolveContradiction(
 
       case 'merge': {
         const mergedId = randomUUID().replace(/-/g, '');
-        const m1 = db.prepare(`SELECT * FROM memories WHERE id = ?`).get(resolution.memory_id_1) as any;
+        const m1 = db.prepare(`SELECT * FROM memories WHERE id = ?`).get(resolution.memory_id_1) as MemoryRow | undefined;
         if (!m1) {
           throw new Error(`Memory ${resolution.memory_id_1} not found for merge`);
         }
@@ -182,9 +183,9 @@ export function scanContradictions(db: Database.Database, projectId: string, aut
       AND m2.deleted_at IS NULL
       AND cr.id IS NULL
       AND (e.project_id = ? OR e.project_id = 'global')
-  `).all(projectId) as any[];
+  `).all(projectId) as ContradictionScanEdge[];
 
-  const newResolutions: any[] = [];
+  const newResolutions: Array<{ id: string; memory_id_1: string; memory_id_2: string; auto_resolved?: string }> = [];
   let autoResolved = 0;
 
   if (autoCreateResolutions) {

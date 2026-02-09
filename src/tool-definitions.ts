@@ -1,5 +1,5 @@
 /**
- * Just-Memory v4.3 — Tool Definitions
+ * Just-Memory v5.0 — Tool Definitions
  * Static MCP tool schema definitions (23 tools).
  * Extracted from monolith — pure data, no logic.
  */

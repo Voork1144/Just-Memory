@@ -3,7 +3,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 
 export default [
   {
-    files: ['src/just-memory-v2.1.ts'],
+    files: ['src/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -38,7 +38,7 @@ export default [
       'no-async-promise-executor': 'error',
       
       // Code quality
-      '@typescript-eslint/no-explicit-any': 'off', // too many to fix now
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       'no-console': 'off', // MCP server logs via console.error intentionally
     },

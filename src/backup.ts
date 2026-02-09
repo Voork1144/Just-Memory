@@ -1,5 +1,5 @@
 /**
- * Just-Memory v4.3 — Backup/Restore
+ * Just-Memory v5.0 — Backup/Restore
  * Memory backup, restore, listing, and cleanup operations.
  * Extracted from monolith — pure functions with db parameter injection.
  */
@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync, realpathSync } from 'fs';
 import { join, resolve, sep } from 'path';
 import { BACKUP_DIR } from './config.js';
+import { validateRestoreMode } from './validation.js';
 
 // ============================================================================
 // Backup
@@ -25,7 +26,7 @@ export function backupMemories(db: Database.Database, projectId: string, backupD
   const edges = db.prepare('SELECT id, project_id, from_id, to_id, relation_type, confidence, metadata, valid_from, valid_to FROM edges WHERE project_id = ? OR project_id = \'global\'').all(projectId);
 
   const backup = {
-    version: '4.3.4',
+    version: '5.0.0',
     project_id: projectId,
     created_at: new Date().toISOString(),
     counts: {
@@ -57,6 +58,9 @@ export function restoreMemories(
   currentProjectId?: string,
   backupDir = BACKUP_DIR,
 ) {
+  // Whitelist validation: only allow 'merge' and 'replace'
+  mode = validateRestoreMode(mode);
+
   if (!existsSync(backupPath)) {
     return { error: 'Backup file not found', path: backupPath };
   }
@@ -88,8 +92,8 @@ export function restoreMemories(
   let backup;
   try {
     backup = JSON.parse(readFileSync(realPath, 'utf-8'));
-  } catch (parseError: any) {
-    return { error: 'Invalid backup file format', path: backupPath, details: parseError.message };
+  } catch (_parseError: any) {
+    return { error: 'Invalid backup file format', path: backupPath };
   }
 
   // Validate backup schema
@@ -154,8 +158,8 @@ export function restoreMemories(
       mode,
       ...(needsEmbedding > 0 ? { note: `${needsEmbedding} memories need re-embedding. Run memory_rebuild_embeddings to restore semantic search.` } : {}),
     };
-  } catch (err: any) {
-    return { error: 'Restore failed — no changes made', details: err.message };
+  } catch (_err: any) {
+    return { error: 'Restore failed — no changes made' };
   }
 }
 

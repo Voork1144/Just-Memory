@@ -5,7 +5,8 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { safeParse } from './config.js';
-import { validateEntityName, validateObservations, sanitizeLikePattern } from './validation.js';
+import { validateEntityName, validateObservations, sanitizeLikePattern, validateRelationType, validateScratchpadKey } from './validation.js';
+import type { EdgeRow, ScratchpadRow, EntityRow, EntityRelationRow, EntityTypeRow, ParentTypeRow, EntityTypeNameRow } from './types.js';
 
 // ============================================================================
 // Edge Functions
@@ -20,6 +21,7 @@ export function createEdge(
   metadata = {},
   projectId: string
 ) {
+  validateRelationType(relationType);
   const id = randomUUID().replace(/-/g, '');
   db.prepare(`INSERT INTO edges (id, project_id, from_id, to_id, relation_type, confidence, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(id, projectId, fromId, toId, relationType, confidence, JSON.stringify(metadata));
@@ -28,7 +30,7 @@ export function createEdge(
 
 export function queryEdges(db: Database.Database, memoryId: string, direction = 'both', projectId: string, includeInvalidated = false) {
   let sql = 'SELECT * FROM edges WHERE (project_id = ? OR project_id = \'global\')';
-  const params: any[] = [projectId];
+  const params: (string | number)[] = [projectId];
 
   if (!includeInvalidated) {
     sql += ' AND valid_to IS NULL';
@@ -45,7 +47,7 @@ export function queryEdges(db: Database.Database, memoryId: string, direction = 
     params.push(memoryId, memoryId);
   }
 
-  const edges = db.prepare(sql).all(...params) as any[];
+  const edges = db.prepare(sql).all(...params) as EdgeRow[];
   return edges.map(e => ({
     ...e,
     metadata: safeParse(e.metadata, {}),
@@ -62,6 +64,7 @@ export function invalidateEdge(db: Database.Database, edgeId: string) {
 // ============================================================================
 
 export function scratchSet(db: Database.Database, key: string, value: string, ttlSeconds?: number, projectId?: string) {
+  validateScratchpadKey(key);
   const project = projectId || 'global';
   const expiresAt = ttlSeconds ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
 
@@ -79,7 +82,7 @@ export function scratchGet(db: Database.Database, key: string, projectId: string
     AND (expires_at IS NULL OR expires_at > datetime('now'))
     ORDER BY CASE WHEN project_id = ? THEN 0 ELSE 1 END
     LIMIT 1
-  `).get(key, projectId, projectId) as any;
+  `).get(key, projectId, projectId) as ScratchpadRow | undefined;
 
   if (!row) return { key, value: null };
   return { key, value: row.value, expiresAt: row.expires_at, createdAt: row.created_at };
@@ -98,7 +101,7 @@ export function scratchList(db: Database.Database, projectId: string) {
     AND key NOT LIKE '__system_%'
     AND key NOT LIKE '_jm_%'
     ORDER BY created_at DESC
-  `).all(projectId) as any[];
+  `).all(projectId) as ScratchpadRow[];
 
   return { project_id: projectId, keys: rows };
 }
@@ -127,9 +130,9 @@ export function createEntity(
     db.prepare(`INSERT INTO entities (id, project_id, name, entity_type, observations) VALUES (?, ?, ?, ?, ?)`)
       .run(id, projectId, name, entityType, JSON.stringify(validObs));
     return { id, project_id: projectId, name, entityType, observations: validObs, created: true };
-  } catch (err: any) {
-    if (err.message.includes('UNIQUE')) {
-      const existing = db.prepare('SELECT * FROM entities WHERE project_id = ? AND name = ?').get(projectId, name) as any;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes('UNIQUE')) {
+      const existing = db.prepare('SELECT * FROM entities WHERE project_id = ? AND name = ?').get(projectId, name) as EntityRow;
       const existingObs = safeParse(existing.observations, []);
       const mergedObs = [...new Set([...existingObs, ...validObs])];
 
@@ -147,14 +150,14 @@ export function getEntity(db: Database.Database, name: string, projectId: string
     SELECT * FROM entities WHERE name = ? AND (project_id = ? OR project_id = 'global')
     ORDER BY CASE WHEN project_id = ? THEN 0 ELSE 1 END
     LIMIT 1
-  `).get(name, projectId, projectId) as any;
+  `).get(name, projectId, projectId) as EntityRow | undefined;
 
   if (!entity) return { error: 'Entity not found', name };
 
   const relations = db.prepare(`
     SELECT * FROM entity_relations
     WHERE (from_entity = ? OR to_entity = ?) AND (project_id = ? OR project_id = 'global')
-  `).all(entity.name, entity.name, projectId) as any[];
+  `).all(entity.name, entity.name, projectId) as EntityRelationRow[];
 
   const allObs: string[] = safeParse(entity.observations, []);
   return {
@@ -187,8 +190,8 @@ export function linkEntities(
     db.prepare(`INSERT INTO entity_relations (id, project_id, from_entity, to_entity, relation_type) VALUES (?, ?, ?, ?, ?)`)
       .run(id, projectId, from, to, relationType);
     return { id, project_id: projectId, from, relationType, to, linked: true };
-  } catch (err: any) {
-    if (err.message.includes('UNIQUE')) {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes('UNIQUE')) {
       return { from, relationType, to, alreadyExists: true };
     }
     throw err;
@@ -207,7 +210,7 @@ export function searchEntities(
     SELECT * FROM entities
     WHERE (project_id = ? OR project_id = 'global')
   `;
-  const params: any[] = [project];
+  const params: (string | number)[] = [project];
 
   if (query) {
     sql += ` AND (name LIKE ? OR observations LIKE ?)`;
@@ -222,7 +225,7 @@ export function searchEntities(
   sql += ` ORDER BY updated_at DESC LIMIT ?`;
   params.push(limit);
 
-  const entities = db.prepare(sql).all(...params) as any[];
+  const entities = db.prepare(sql).all(...params) as EntityRow[];
 
   return entities.map(e => {
     const allObs: string[] = safeParse(e.observations, []);
@@ -253,7 +256,7 @@ export function getBriefingEntities(
     SELECT * FROM entities
     WHERE (project_id = ? OR project_id = 'global')
     ORDER BY updated_at DESC LIMIT ?
-  `).all(project, limit) as any[];
+  `).all(project, limit) as EntityRow[];
 
   return entities.map(e => {
     const allObs: string[] = safeParse(e.observations, []);
@@ -275,7 +278,7 @@ export function observeEntity(db: Database.Database, name: string, observations:
     SELECT * FROM entities WHERE name = ? AND (project_id = ? OR project_id = 'global')
     ORDER BY CASE WHEN project_id = ? THEN 0 ELSE 1 END
     LIMIT 1
-  `).get(name, projectId, projectId) as any;
+  `).get(name, projectId, projectId) as EntityRow | undefined;
 
   if (!entity) return { error: 'Entity not found', name };
 
@@ -290,7 +293,7 @@ export function observeEntity(db: Database.Database, name: string, observations:
 }
 
 export function deleteEntity(db: Database.Database, name: string, projectId: string) {
-  const entity = db.prepare('SELECT * FROM entities WHERE name = ? AND project_id = ?').get(name, projectId) as any;
+  const entity = db.prepare('SELECT * FROM entities WHERE name = ? AND project_id = ?').get(name, projectId) as EntityRow | undefined;
 
   if (!entity) return { error: 'Entity not found', name };
 
@@ -313,7 +316,7 @@ export function getTypeAncestors(db: Database.Database, typeName: string): strin
     if (visited.has(current)) break;
     visited.add(current);
 
-    const type = db.prepare('SELECT parent_type FROM entity_types WHERE name = ?').get(current) as any;
+    const type = db.prepare('SELECT parent_type FROM entity_types WHERE name = ?').get(current) as ParentTypeRow | undefined;
     if (type?.parent_type) {
       ancestors.push(type.parent_type);
       current = type.parent_type;
@@ -335,7 +338,7 @@ export function getTypeDescendants(db: Database.Database, typeName: string): str
     if (!current || visited.has(current)) continue;
     visited.add(current);
 
-    const children = db.prepare('SELECT name FROM entity_types WHERE parent_type = ?').all(current) as any[];
+    const children = db.prepare('SELECT name FROM entity_types WHERE parent_type = ?').all(current) as EntityTypeNameRow[];
     for (const child of children) {
       descendants.push(child.name);
       queue.push(child.name);
@@ -367,8 +370,8 @@ export function defineEntityType(db: Database.Database, name: string, parentType
     db.prepare('INSERT INTO entity_types (name, parent_type, description) VALUES (?, ?, ?)')
       .run(normalizedName, parentType || null, description || null);
     return { name: normalizedName, parentType: parentType || null, description, created: true };
-  } catch (err: any) {
-    if (err.message.includes('UNIQUE') || err.message.includes('PRIMARY KEY')) {
+  } catch (err: unknown) {
+    if (err instanceof Error && (err.message.includes('UNIQUE') || err.message.includes('PRIMARY KEY'))) {
       db.prepare('UPDATE entity_types SET parent_type = ?, description = ? WHERE name = ?')
         .run(parentType || null, description || null, normalizedName);
       return { name: normalizedName, parentType: parentType || null, description, updated: true };
@@ -378,7 +381,7 @@ export function defineEntityType(db: Database.Database, name: string, parentType
 }
 
 export function getTypeHierarchy(db: Database.Database, typeName: string) {
-  const type = db.prepare('SELECT * FROM entity_types WHERE name = ?').get(typeName) as any;
+  const type = db.prepare('SELECT * FROM entity_types WHERE name = ?').get(typeName) as EntityTypeRow | undefined;
   if (!type) return { error: `Entity type '${typeName}' not found` };
 
   return {
@@ -392,7 +395,7 @@ export function getTypeHierarchy(db: Database.Database, typeName: string) {
 }
 
 export function listEntityTypes(db: Database.Database) {
-  const types = db.prepare('SELECT * FROM entity_types ORDER BY name').all() as any[];
+  const types = db.prepare('SELECT * FROM entity_types ORDER BY name').all() as EntityTypeRow[];
 
   // v3.13: Build parent/child maps in-memory to avoid N+1 queries
   const parentMap = new Map<string, string | null>();
@@ -465,7 +468,7 @@ export function searchEntitiesByTypeHierarchy(
   sql += ` ORDER BY updated_at DESC LIMIT ?`;
   params.push(limit);
 
-  const entities = db.prepare(sql).all(...params) as any[];
+  const entities = db.prepare(sql).all(...params) as EntityRow[];
   return {
     searchedType: entityType,
     includedTypes: allTypes,

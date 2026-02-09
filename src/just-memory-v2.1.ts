@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Just-Memory v4.3.4 — MCP Server Orchestrator (23 tools)
+ * Just-Memory v5.0.0 — MCP Server Orchestrator (23 tools)
  *
  * Thin orchestrator: DB setup, HNSW management, wrapper functions, consolidation timer,
  * MCP server lifecycle. All business logic extracted to 19 modules.
@@ -98,6 +98,7 @@ import {
   listProjects as _listProjects,
 } from './stats.js';
 import { dispatchToolCall, type ToolDispatch } from './tool-handlers.js';
+import type { ChatConversationListRow, ChatParseAndIngestResult } from './types.js';
 
 // Chat Ingestion imports
 import {
@@ -234,7 +235,7 @@ function initProject() {
   const detected = detectProject();
   currentProjectId = detected.id;
   currentProjectPath = detected.path;
-  console.error(`[Just-Memory v4.3] Project: ${detected.id} (${detected.source})`);
+  console.error(`[Just-Memory] Project: ${detected.id} (${detected.source})`);
 }
 
 initProject();
@@ -253,19 +254,19 @@ db.pragma('busy_timeout = 5000');
 db.pragma('foreign_keys = ON');
 
 // Startup integrity check
-const integrityResult = db.pragma('integrity_check') as any[];
+const integrityResult = db.pragma('integrity_check') as Array<{ integrity_check: string }>;
 if (integrityResult[0]?.integrity_check !== 'ok') {
-  console.error('[Just-Memory v4.3] ⚠️ DATABASE INTEGRITY CHECK FAILED:', integrityResult);
-  console.error('[Just-Memory v4.3] Attempting to continue, but data may be corrupted. Consider restoring from backup.');
+  console.error('[Just-Memory] ⚠️ DATABASE INTEGRITY CHECK FAILED:', integrityResult);
+  console.error('[Just-Memory] Attempting to continue, but data may be corrupted. Consider restoring from backup.');
 } else {
-  console.error('[Just-Memory v4.3] Database integrity check passed');
+  console.error('[Just-Memory] Database integrity check passed');
 }
 
 try {
   sqliteVec.load(db);
-  console.error('[Just-Memory v4.3] sqlite-vec extension loaded');
+  console.error('[Just-Memory] sqlite-vec extension loaded');
 } catch (err) {
-  console.error('[Just-Memory v4.3] Warning: sqlite-vec load failed:', err);
+  console.error('[Just-Memory] Warning: sqlite-vec load failed:', err);
 }
 
 // ============================================================================
@@ -293,11 +294,11 @@ async function initVectorStore(): Promise<void> {
       const started = await qdrant.start();
       if (started) {
         vectorStore = qdrant;
-        console.error(`[Just-Memory v4.3] VectorStore: Qdrant (${EMBEDDING_DIM}-dim, port ${QDRANT_PORT})`);
+        console.error(`[Just-Memory] VectorStore: Qdrant (${EMBEDDING_DIM}-dim, port ${QDRANT_PORT})`);
         return;
       }
     } catch (err: any) {
-      console.error(`[Just-Memory v4.3] Qdrant init failed: ${err.message}, falling back to sqlite-vec`);
+      console.error(`[Just-Memory] Qdrant init failed: ${err.message}, falling back to sqlite-vec`);
     }
   }
 
@@ -308,12 +309,12 @@ async function initVectorStore(): Promise<void> {
     hnswSearch: (embedding, limit, efSearch) => searchHNSW(embedding, limit, efSearch),
     hnswReady: () => hnswIndexReady,
   });
-  console.error(`[Just-Memory v4.3] VectorStore: sqlite-vec (${EMBEDDING_DIM}-dim, HNSW=${hnswIndexReady ? 'yes' : 'pending'})`);
+  console.error(`[Just-Memory] VectorStore: sqlite-vec (${EMBEDDING_DIM}-dim, HNSW=${hnswIndexReady ? 'yes' : 'pending'})`);
 }
 
 // Start VectorStore init (non-blocking)
 initVectorStore().catch(err => {
-  console.error('[Just-Memory v4.3] VectorStore init failed:', err);
+  console.error('[Just-Memory] VectorStore init failed:', err);
 });
 
 /**
@@ -328,7 +329,7 @@ async function runEmbeddingWorker(): Promise<number> {
     WHERE embedding IS NULL AND deleted_at IS NULL
     ORDER BY created_at DESC
     LIMIT ?
-  `).all(EMBEDDING_WORKER_BATCH_SIZE) as any[];
+  `).all(EMBEDDING_WORKER_BATCH_SIZE) as Array<{ id: string; content: string }>;
 
   if (orphans.length === 0) return 0;
 
@@ -341,19 +342,19 @@ async function runEmbeddingWorker(): Promise<number> {
         const buffer = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
         const projectId = await writeLock.withLock(() => {
           db.prepare('UPDATE memories SET embedding = ? WHERE id = ?').run(buffer, mem.id);
-          return (db.prepare('SELECT project_id FROM memories WHERE id = ?').get(mem.id) as any)?.project_id || GLOBAL_PROJECT;
+          return (db.prepare('SELECT project_id FROM memories WHERE id = ?').get(mem.id) as { project_id: string } | undefined)?.project_id || GLOBAL_PROJECT;
         });
         // Also upsert to VectorStore (Qdrant)
         await vectorStore!.upsert(mem.id, embedding, { projectId });
         embedded++;
       }
     } catch (err: any) {
-      console.error(`[Just-Memory v4.3] Embedding worker failed for ${mem.id}: ${err.message}`);
+      console.error(`[Just-Memory] Embedding worker failed for ${mem.id}: ${err.message}`);
     }
   }
 
   if (embedded > 0) {
-    console.error(`[Just-Memory v4.3] Embedding worker: processed ${embedded}/${orphans.length} memories`);
+    console.error(`[Just-Memory] Embedding worker: processed ${embedded}/${orphans.length} memories`);
   }
   return embedded;
 }
@@ -362,7 +363,7 @@ function startEmbeddingWorker(): void {
   if (embeddingWorkerTimer) return;
   embeddingWorkerTimer = setInterval(() => {
     runEmbeddingWorker().catch(err => {
-      console.error('[Just-Memory v4.3] Embedding worker error:', err);
+      console.error('[Just-Memory] Embedding worker error:', err);
     });
   }, EMBEDDING_WORKER_INTERVAL_MS);
 }
@@ -399,10 +400,11 @@ function getEffectiveProject(projectId?: string): string {
 // ============================================================================
 // Tool Logging Wrappers (logic in tool-logging.ts)
 // ============================================================================
-function logToolCall(toolName: string, args: any, output: any, success: boolean, error: string | null, durationMs: number, projectId: string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args/output are untyped JSON
+function logToolCall(toolName: string, args: any, output: unknown, success: boolean, error: string | null, durationMs: number, projectId: string): string {
   return _logToolCall(db, toolName, args, output, success, error, durationMs, projectId, updateSessionState);
 }
-function getToolHistory(toolName?: string, success?: boolean, since?: string, limit: number = 50, projectId?: string): any[] {
+function getToolHistory(toolName?: string, success?: boolean, since?: string, limit: number = 50, projectId?: string) {
   return _getToolHistory(db, toolName, success, since, limit, projectId);
 }
 
@@ -431,6 +433,7 @@ import {
 
 // Wrappers that inject db + currentProjectId
 function updateSessionHeartbeat() { _updateSessionHeartbeat(db, currentProjectId); }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON
 function updateSessionState(toolName: string, args: any) { _updateSessionState(db, currentProjectId, toolName, args); }
 function detectCrashStateForBriefing() { return _detectCrashStateForBriefing(db, currentProjectId); }
 function updateStoredSessionId() { _updateStoredSessionId(db, currentProjectId); }
@@ -447,7 +450,7 @@ async function startupRecoveryInit(): Promise<{ ingested: number; backed_up: boo
   let ingested = 0;
   let backed_up = false;
 
-  console.error(`[Just-Memory v4.3] MCP Server starting with session ID: ${CURRENT_SESSION_ID}`);
+  console.error(`[Just-Memory] MCP Server starting with session ID: ${CURRENT_SESSION_ID}`);
 
   if (needsAutoBackup()) {
     try {
@@ -682,8 +685,7 @@ function cleanExpiredScratchpad(projectId?: string) {
 /**
  * Run full consolidation cycle
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runConsolidation(projectId?: string): Promise<any> {
+async function runConsolidation(projectId?: string): Promise<Record<string, unknown>> {
   const project = getEffectiveProject(projectId);
   
   // Advisory lock: prevent multiple instances from consolidating simultaneously
@@ -693,7 +695,7 @@ async function runConsolidation(projectId?: string): Promise<any> {
   const LOCK_TIMEOUT_MS = 300000; // 5 minutes (v4.3.1: increased from 2min for large DBs)
 
   const acquireLock = db.transaction(() => {
-    const existingLock = db.prepare('SELECT value, created_at FROM scratchpad WHERE key = ? AND project_id = ?').get(lockKey, project) as any;
+    const existingLock = db.prepare('SELECT value, created_at FROM scratchpad WHERE key = ? AND project_id = ?').get(lockKey, project) as { value: string; created_at: string } | undefined;
 
     if (existingLock) {
       const lockAge = Date.now() - new Date(existingLock.created_at).getTime();
@@ -702,7 +704,7 @@ async function runConsolidation(projectId?: string): Promise<any> {
         return { acquired: false, reason: 'Another instance is consolidating', locked_by: existingLock.value };
       }
       // Stale lock (instance crashed) — take over
-      console.error(`[Just-Memory v4.3] Stale consolidation lock detected (${lockAge}ms old), taking over`);
+      console.error(`[Just-Memory] Stale consolidation lock detected (${lockAge}ms old), taking over`);
     }
 
     // Acquire lock atomically within this transaction
@@ -792,17 +794,17 @@ async function runConsolidation(projectId?: string): Promise<any> {
   const reembedded = await reembedOrphaned(project, 50);
 
   // Auto-backup if last backup is >24h old
-  let autoBackup: any = null;
+  let autoBackup: Record<string, unknown> | null = null;
   try {
     const backups = listBackups();
     const lastBackupTime = backups.backups.length > 0 ? new Date(backups.backups[0].created).getTime() : 0;
     const twentyFourHours = 24 * 60 * 60 * 1000;
     if (Date.now() - lastBackupTime > twentyFourHours) {
       autoBackup = backupMemories(project);
-      console.error(`[Just-Memory v4.3] Auto-backup created: ${autoBackup.filename}`);
+      console.error(`[Just-Memory] Auto-backup created: ${autoBackup.filename}`);
     }
   } catch (err: any) {
-    console.error(`[Just-Memory v4.3] Auto-backup failed: ${err.message}`);
+    console.error(`[Just-Memory] Auto-backup failed: ${err.message}`);
   }
 
   return { ...consolidateResult, reembedded, autoBackup };
@@ -825,7 +827,7 @@ function startConsolidationTimer() {
         new Promise(resolve => setTimeout(resolve, CONSOLIDATION_HARD_TIMEOUT_MS)) // 5-minute hard timeout
       ])
         .catch((err: any) => {
-          console.error('[Just-Memory v4.3] Background consolidation error:', err.message);
+          console.error('[Just-Memory] Background consolidation error:', err.message);
         })
         .finally(() => {
           activeConsolidation = null;
@@ -843,7 +845,7 @@ function startConsolidationTimer() {
 // ============================================================================
 // Scheduled Tasks Wrappers (logic in scheduled-tasks.ts)
 // ============================================================================
-function createScheduledTask(title: string, scheduleExpr: string, description?: string, recurring = false, actionType = 'reminder', actionData?: any, memoryId?: string, projectId?: string) {
+function createScheduledTask(title: string, scheduleExpr: string, description?: string, recurring = false, actionType = 'reminder', actionData?: Record<string, unknown>, memoryId?: string, projectId?: string) {
   return _createScheduledTask(db, title, scheduleExpr, description, recurring, getEffectiveProject(projectId), actionType, actionData, memoryId);
 }
 function listScheduledTasks(status?: string, projectId?: string, limit = 50) {
@@ -920,7 +922,7 @@ function setCurrentProject(projectId: string, path?: string) {
 // MCP Server Setup
 // ============================================================================
 const server = new Server(
-  { name: 'just-memory', version: '4.3.4' },
+  { name: 'just-memory', version: '5.0.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -941,7 +943,7 @@ function sanitizeErrorMessage(error: unknown): string {
 // ============================================================================
 
 /** Briefing handler — stays in monolith due to deep access to session state */
-function buildBriefingResult(projectId?: string, maxTokens?: number): any {
+function buildBriefingResult(projectId?: string, maxTokens?: number) {
   const briefingProjectId = getEffectiveProject(projectId);
 
   // v4.1: Tiered memory selection — core knowledge always surfaces
@@ -961,7 +963,7 @@ function buildBriefingResult(projectId?: string, maxTokens?: number): any {
     WHERE status = 'pending' AND (project_id = ? OR project_id = 'global')
     AND next_run <= datetime('now', '+1 hour')
     ORDER BY next_run LIMIT 5
-  `).all(briefingProjectId) as any[];
+  `).all(briefingProjectId) as Array<{ title: string; description: string | null; next_run: string | null }>;
 
   // v3.12: Get in-progress task (for context recovery after retry/compaction)
   const inProgressTask = getCurrentTask();
@@ -1007,17 +1009,17 @@ function buildBriefingResult(projectId?: string, maxTokens?: number): any {
 }
 
 /** Health handler — stays in monolith due to deep access to vectorStore, writeLock, etc. */
-async function buildHealthInfo(): Promise<any> {
+async function buildHealthInfo() {
   const sessionStartMs = parseInt(CURRENT_SESSION_ID.split('_')[0]) || Date.now();
   let dbIntegrity = false;
-  try { dbIntegrity = ((db.pragma('integrity_check') as any[])[0] as any)?.integrity_check === 'ok'; } catch { /* */ }
-  const memCount = (db.prepare('SELECT COUNT(*) as c FROM memories WHERE deleted_at IS NULL').get() as any)?.c || 0;
-  const migrationCount = (() => { try { return (db.prepare('SELECT COUNT(*) as c FROM schema_migrations').get() as any)?.c || 0; } catch { return 0; } })();
-  const pendingEmbeddings = (db.prepare('SELECT COUNT(*) as c FROM memories WHERE embedding IS NULL AND deleted_at IS NULL').get() as any)?.c || 0;
+  try { dbIntegrity = ((db.pragma('integrity_check') as Array<{ integrity_check: string }>)[0])?.integrity_check === 'ok'; } catch { /* */ }
+  const memCount = (db.prepare('SELECT COUNT(*) as c FROM memories WHERE deleted_at IS NULL').get() as { c: number } | undefined)?.c || 0;
+  const migrationCount = (() => { try { return (db.prepare('SELECT COUNT(*) as c FROM schema_migrations').get() as { c: number } | undefined)?.c || 0; } catch { return 0; } })();
+  const pendingEmbeddings = (db.prepare('SELECT COUNT(*) as c FROM memories WHERE embedding IS NULL AND deleted_at IS NULL').get() as { c: number } | undefined)?.c || 0;
   const vectorCount = vectorStore?.isReady() ? await vectorStore.count() : 0;
   return {
     status: 'ok',
-    version: '4.3.4',
+    version: '5.0.0',
     session_id: CURRENT_SESSION_ID,
     uptime_seconds: Math.floor((Date.now() - sessionStartMs) / 1000),
     models: {
@@ -1048,7 +1050,7 @@ async function buildHealthInfo(): Promise<any> {
 }
 
 /** Chat ingest wrapper — parse + ingest inline */
-function chatParseAndIngest(filePath: string, projectId?: string): any {
+function chatParseAndIngest(filePath: string, projectId?: string): ChatParseAndIngestResult {
   const parsed = parseClaudeCodeJsonl(filePath);
   if (!parsed) {
     return { error: 'Failed to parse conversation file', file: filePath };
@@ -1058,7 +1060,7 @@ function chatParseAndIngest(filePath: string, projectId?: string): any {
 }
 
 /** Chat list wrapper — inline SQL */
-function chatListConversations(projectId?: string, limit?: number): any {
+function chatListConversations(projectId?: string, limit?: number): ChatConversationListRow[] {
   const chatLimit = Math.min(limit || 20, 100);
   const chatProject = getEffectiveProject(projectId);
   return db.prepare(`
@@ -1066,7 +1068,7 @@ function chatListConversations(projectId?: string, limit?: number): any {
            message_count, tool_use_count, total_input_tokens, total_output_tokens, model
     FROM conversations WHERE project_id = ? OR project_id = 'global'
     ORDER BY started_at DESC LIMIT ?
-  `).all(chatProject, chatLimit);
+  `).all(chatProject, chatLimit) as ChatConversationListRow[];
 }
 
 const toolDispatch: ToolDispatch = {
@@ -1158,6 +1160,7 @@ const toolDispatch: ToolDispatch = {
 // Handle tool calls (dispatch logic in tool-handlers.ts)
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: rawArgs } = request.params;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON from wire
   const args = rawArgs as any;
   lastActivityTime = Date.now();
   updateSessionHeartbeat();
@@ -1186,7 +1189,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         logToolCall(name, args, null, false, error.message || String(error), durationMs, projectId);
       }
     } catch (logErr: any) {
-      console.error(`[Just-Memory v4.3] Tool log also failed: ${logErr.message}`);
+      console.error(`[Just-Memory] Tool log also failed: ${logErr.message}`);
     }
 
     return {
@@ -1200,20 +1203,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[Just-Memory v4.3] Server started (modular)');
-  console.error(`[Just-Memory v4.3] Session ID: ${CURRENT_SESSION_ID}`);
-  console.error(`[Just-Memory v4.3] Project: ${currentProjectId} (from ${detectProject().source})`);
-  console.error(`[Just-Memory v4.3] Database: ${DB_PATH}`);
-  console.error(`[Just-Memory v4.3] Tools: ${TOOLS.length}`);
+  console.error('[Just-Memory] Server started (modular)');
+  console.error(`[Just-Memory] Session ID: ${CURRENT_SESSION_ID}`);
+  console.error(`[Just-Memory] Project: ${currentProjectId} (from ${detectProject().source})`);
+  console.error(`[Just-Memory] Database: ${DB_PATH}`);
+  console.error(`[Just-Memory] Tools: ${TOOLS.length}`);
 
   // Startup recovery: auto-ingest, auto-backup
   try {
     const recovery = await startupRecoveryInit();
     if (recovery.ingested > 0 || recovery.backed_up) {
-      console.error(`[Just-Memory v4.3] Startup: ingested=${recovery.ingested}, backup=${recovery.backed_up}`);
+      console.error(`[Just-Memory] Startup: ingested=${recovery.ingested}, backup=${recovery.backed_up}`);
     }
   } catch (e) {
-    console.error('[Just-Memory v4.3] Startup recovery failed:', e);
+    console.error('[Just-Memory] Startup recovery failed:', e);
   }
 
   // Start background consolidation timer
@@ -1224,7 +1227,7 @@ async function main() {
 
   // Graceful shutdown: clear session state, wait for in-flight work, then close DB cleanly
   const shutdown = async (signal: string) => {
-    console.error(`[Just-Memory v4.3] Received ${signal}, shutting down gracefully...`);
+    console.error(`[Just-Memory] Received ${signal}, shutting down gracefully...`);
 
     // Clear session state (indicates graceful shutdown, not crash)
     clearSessionState();
@@ -1244,7 +1247,7 @@ async function main() {
     }
     // Wait for in-flight consolidation to finish (with timeout)
     if (activeConsolidation) {
-      console.error('[Just-Memory v4.3] Waiting for in-flight consolidation to finish...');
+      console.error('[Just-Memory] Waiting for in-flight consolidation to finish...');
       try {
         await Promise.race([
           activeConsolidation,
@@ -1269,17 +1272,17 @@ async function main() {
     if (vectorStore) {
       try {
         await vectorStore.close();
-        console.error('[Just-Memory v4.3] VectorStore closed');
+        console.error('[Just-Memory] VectorStore closed');
       } catch (err: any) {
-        console.error(`[Just-Memory v4.3] VectorStore close error: ${err.message}`);
+        console.error(`[Just-Memory] VectorStore close error: ${err.message}`);
       }
     }
     try {
       db.pragma('wal_checkpoint(TRUNCATE)');
       db.close();
-      console.error('[Just-Memory v4.3] Database closed cleanly');
+      console.error('[Just-Memory] Database closed cleanly');
     } catch (err: any) {
-      console.error(`[Just-Memory v4.3] Error during shutdown: ${err.message}`);
+      console.error(`[Just-Memory] Error during shutdown: ${err.message}`);
     }
     process.exit(0);
   };
@@ -1289,11 +1292,11 @@ async function main() {
 
 // Global safety nets — prevent unhandled errors from silently crashing the MCP server
 process.on('unhandledRejection', (reason: any) => {
-  console.error('[Just-Memory v4.3] Unhandled promise rejection:', reason?.message || reason);
+  console.error('[Just-Memory] Unhandled promise rejection:', reason?.message || reason);
 });
 process.on('uncaughtException', (err: Error) => {
-  console.error('[Just-Memory v4.3] Uncaught exception:', err.message);
-  console.error('[Just-Memory v4.3] Process is in undefined state after uncaught exception — shutting down cleanly.');
+  console.error('[Just-Memory] Uncaught exception:', err.message);
+  console.error('[Just-Memory] Process is in undefined state after uncaught exception — shutting down cleanly.');
   try {
     db.pragma('wal_checkpoint(TRUNCATE)');
     db.close();

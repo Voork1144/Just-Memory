@@ -10,6 +10,7 @@
  * that handles upsert/delete/search/count operations.
  */
 import Database from 'better-sqlite3';
+import type { VecScoreRow, CntRow } from './types.js';
 
 // ============================================================================
 // Interfaces
@@ -124,7 +125,7 @@ export class SqliteVecStore implements VectorStore {
           WHERE m.embedding IS NOT NULL
           AND m.id IN (${placeholders})
         `;
-        const params: any[] = [queryBuffer, ...candidateIds];
+        const params: (Buffer | string | number)[] = [queryBuffer, ...candidateIds];
 
         if (filter?.excludeDeleted !== false) {
           sql += ' AND m.deleted_at IS NULL';
@@ -140,7 +141,7 @@ export class SqliteVecStore implements VectorStore {
         sql += ' ORDER BY score DESC LIMIT ?';
         params.push(limit);
 
-        const rows = this.db.prepare(sql).all(...params) as any[];
+        const rows = this.db.prepare(sql).all(...params) as VecScoreRow[];
         return rows.filter(r => r.score > 0.3).map(r => ({ id: r.id, score: r.score }));
       }
     }
@@ -151,7 +152,7 @@ export class SqliteVecStore implements VectorStore {
       FROM memories m
       WHERE m.embedding IS NOT NULL
     `;
-    const params: any[] = [queryBuffer];
+    const params: (Buffer | string | number)[] = [queryBuffer];
 
     if (filter?.excludeDeleted !== false) {
       sql += ' AND m.deleted_at IS NULL';
@@ -167,7 +168,7 @@ export class SqliteVecStore implements VectorStore {
     sql += ' ORDER BY score DESC LIMIT ?';
     params.push(limit);
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as VecScoreRow[];
     return rows.filter(r => r.score > 0.3).map(r => ({ id: r.id, score: r.score }));
   }
 
@@ -178,7 +179,7 @@ export class SqliteVecStore implements VectorStore {
   }
 
   async count(): Promise<number> {
-    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM memories WHERE embedding IS NOT NULL AND deleted_at IS NULL').get() as any;
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM memories WHERE embedding IS NOT NULL AND deleted_at IS NULL').get() as CntRow;
     return row?.cnt || 0;
   }
 

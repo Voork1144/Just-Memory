@@ -9,6 +9,7 @@ import { generateEmbedding } from './models.js';
 import { sanitizeLikePattern } from './validation.js';
 import { calculateRetention, calculateEffectiveConfidence } from './memory.js';
 import type { VectorStore } from './vector-store.js';
+import type { MemoryRow, MemoryRowWithSimilarity, MemorySummary } from './types.js';
 
 // Backward compat — still accept HNSWProvider from contradiction.ts
 import type { HNSWProvider } from './contradiction.js';
@@ -28,7 +29,7 @@ export function keywordSearch(
   const trimmed = query.trim();
   if (!trimmed) return []; // v3.13: empty query returns nothing for keyword search
 
-  let rows: any[];
+  let rows: MemoryRow[];
 
   // v3.13: Use FTS5 for O(1) keyword search with BM25 ranking when available
   if (useFTS5) {
@@ -46,7 +47,7 @@ export function keywordSearch(
         AND (m.project_id = ? OR m.project_id = 'global')
         ORDER BY fts_rank
         LIMIT ?
-      `).all(ftsQuery, projectId, limit * 2) as any[];
+      `).all(ftsQuery, projectId, limit * 2) as MemoryRow[];
     } catch {
       // FTS5 query failed (bad syntax etc.) — fall back to LIKE
       const sanitizedQuery = sanitizeLikePattern(trimmed);
@@ -57,7 +58,7 @@ export function keywordSearch(
         AND content LIKE ? ESCAPE '\\'
         ORDER BY confidence DESC, importance DESC
         LIMIT ?
-      `).all(projectId, `%${sanitizedQuery}%`, limit * 2) as any[];
+      `).all(projectId, `%${sanitizedQuery}%`, limit * 2) as MemoryRow[];
     }
   } else {
     const sanitizedQuery = sanitizeLikePattern(trimmed);
@@ -68,7 +69,7 @@ export function keywordSearch(
       AND content LIKE ? ESCAPE '\\'
       ORDER BY confidence DESC, importance DESC
       LIMIT ?
-    `).all(projectId, `%${sanitizedQuery}%`, limit * 2) as any[];
+    `).all(projectId, `%${sanitizedQuery}%`, limit * 2) as MemoryRow[];
   }
 
   // v3.13: Compute actual term-match score instead of hardcoding 1.0
@@ -104,7 +105,7 @@ export async function semanticSearch(
 ) {
   const queryEmbedding = await generateEmbedding(query);
   if (!queryEmbedding) {
-    console.error('[Just-Memory v4.0] Semantic search unavailable - embedder not ready');
+    console.error('[Just-Memory] Semantic search unavailable - embedder not ready');
     return [];
   }
 
@@ -126,7 +127,7 @@ export async function semanticSearch(
             SELECT * FROM memories
             WHERE id IN (${placeholders})
             AND deleted_at IS NULL
-          `).all(...ids) as any[];
+          `).all(...ids) as MemoryRow[];
 
           // Merge scores from VectorStore
           const scoreMap = new Map(results.map(r => [r.id, r.score]));
@@ -160,7 +161,7 @@ export async function semanticSearch(
             AND m.id IN (${placeholders})
             ORDER BY similarity DESC
             LIMIT ?
-          `).all(queryBuffer, projectId, ...candidateIds, limit * 2) as any[];
+          `).all(queryBuffer, projectId, ...candidateIds, limit * 2) as MemoryRowWithSimilarity[];
 
           return rows
             .filter(m => m.similarity > 0.3 &&
@@ -182,7 +183,7 @@ export async function semanticSearch(
       AND m.embedding IS NOT NULL
       ORDER BY similarity DESC
       LIMIT ?
-    `).all(queryBuffer, projectId, limit * 2) as any[];
+    `).all(queryBuffer, projectId, limit * 2) as MemoryRowWithSimilarity[];
 
     return rows
       .filter(m => m.similarity > 0.3 &&
@@ -190,7 +191,7 @@ export async function semanticSearch(
         calculateEffectiveConfidence(m) >= confidenceThreshold)
       .map(m => ({ ...m, similarity: m.similarity }));
   } catch (err) {
-    console.error('[Just-Memory v4.0] Semantic search error:', err);
+    console.error('[Just-Memory] Semantic search error:', err);
     return [];
   }
 }
@@ -207,13 +208,13 @@ export async function hybridSearch(
   confidenceThreshold = 0,
   vectorStoreOrHnsw?: VectorStore | HNSWProvider,
   useFTS5 = false
-): Promise<any[]> {
+): Promise<MemorySummary[]> {
   const [keywordResults, semanticResults] = await Promise.all([
     keywordSearch(db, query, projectId, limit, confidenceThreshold, useFTS5),
     semanticSearch(db, query, projectId, limit, confidenceThreshold, vectorStoreOrHnsw),
   ]);
 
-  const combined = new Map<string, any>();
+  const combined = new Map<string, MemoryRow & { keywordScore: number; semanticScore: number }>();
 
   for (const m of keywordResults) {
     combined.set(m.id, { ...m, keywordScore: m.keywordScore || 1.0, semanticScore: 0 });

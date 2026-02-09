@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -36,3 +41,16 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Package dry run
+        run: npm pack --dry-run
+
+      - name: Verify no source maps in package
+        run: |
+          MAP_COUNT=$(npm pack --dry-run 2>&1 | grep -c '\.map' || true)
+          if [ "$MAP_COUNT" -gt 0 ]; then
+            echo "ERROR: Found $MAP_COUNT .map file(s) in package output"
+            npm pack --dry-run 2>&1 | grep '\.map'
+            exit 1
+          fi
+          echo "No .map files found in package - OK"

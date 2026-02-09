@@ -6,6 +6,7 @@
 import Database from 'better-sqlite3';
 import { EMBEDDING_DIM } from './config.js';
 import type { VectorStore } from './vector-store.js';
+import type { ConsolidationMemoryRow, IdContentRow, AvgAccessRow, SimilarMemoryPair } from './types.js';
 
 // ============================================================================
 // Find Similar Memories (for consolidation/merge suggestions)
@@ -40,7 +41,7 @@ export async function findSimilarMemoriesAsync(
   vectorStore?: VectorStore,
   similarityThreshold = 0.85,
   limit = 20
-): Promise<any[]> {
+): Promise<SimilarMemoryPair[]> {
   // v4.0: Use VectorStore for streaming KNN — check each recent memory against the index
   if (vectorStore?.isReady()) {
     const recentMemories = db.prepare(`
@@ -49,9 +50,9 @@ export async function findSimilarMemoriesAsync(
       WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global')
       ORDER BY created_at DESC
       LIMIT 50
-    `).all(projectId) as any[];
+    `).all(projectId) as ConsolidationMemoryRow[];
 
-    const similar: any[] = [];
+    const similar: SimilarMemoryPair[] = [];
 
     for (const mem of recentMemories) {
       if (similar.length >= limit) break;
@@ -91,7 +92,7 @@ export async function findSimilarMemoriesAsync(
       const mem2Ids = similar.map(s => s.memory2.id);
       const uniqueIds = [...new Set(mem2Ids)];
       const placeholders = uniqueIds.map(() => '?').join(',');
-      const rows = db.prepare(`SELECT id, content FROM memories WHERE id IN (${placeholders})`).all(...uniqueIds) as any[];
+      const rows = db.prepare(`SELECT id, content FROM memories WHERE id IN (${placeholders})`).all(...uniqueIds) as IdContentRow[];
       const contentMap = new Map(rows.map(r => [r.id, r.content]));
       for (const s of similar) {
         const content = contentMap.get(s.memory2.id);
@@ -115,19 +116,19 @@ export function findSimilarMemories(
   projectId: string,
   similarityThreshold = 0.85,
   limit = 20
-): any[] {
+): SimilarMemoryPair[] {
   const memories = db.prepare(`
     SELECT id, content, type, tags, importance, confidence, access_count, created_at, embedding
     FROM memories
     WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global')
     ORDER BY created_at DESC
     LIMIT 100
-  `).all(projectId) as any[];
+  `).all(projectId) as ConsolidationMemoryRow[];
 
   // Check if any memories have embeddings
   const hasEmbeddings = memories.some(m => m.embedding != null);
 
-  const similar: any[] = [];
+  const similar: SimilarMemoryPair[] = [];
   const checked = new Set<string>();
 
   for (let i = 0; i < memories.length && similar.length < limit; i++) {
@@ -141,7 +142,7 @@ export function findSimilarMemories(
 
       // v3.13: Prefer embedding cosine similarity over word Jaccard
       if (hasEmbeddings && memories[i].embedding && memories[j].embedding) {
-        similarity = cosineSimilarityFromBlobs(memories[i].embedding, memories[j].embedding);
+        similarity = cosineSimilarityFromBlobs(memories[i].embedding!, memories[j].embedding!);
         method = 'cosine';
       } else {
         // Fallback: word-level Jaccard
@@ -181,7 +182,7 @@ export function strengthenActiveMemories(db: Database.Database, projectId: strin
   const avgAccess = db.prepare(`
     SELECT AVG(access_count) as avg FROM memories
     WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global')
-  `).get(projectId) as any;
+  `).get(projectId) as AvgAccessRow;
 
   // v3.13: Lowered from 3 to 1 — previously never fired because max access_count was 2
   const threshold = Math.max(avgAccess?.avg || 1, 1);

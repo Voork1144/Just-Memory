@@ -1,11 +1,12 @@
 /**
- * Just-Memory v4.3 — Stats & Projects
+ * Just-Memory — Stats & Projects
  * Memory statistics, project listing, and context-based suggestions.
  * Extracted from monolith — pure functions with db parameter injection.
  */
 import Database from 'better-sqlite3';
 import { safeParse } from './config.js';
 import { sanitizeLikePattern } from './validation.js';
+import type { MemoryRow, MemoryCountsRow, CountRow, AvgConfidenceRow, TypeCountRow, ProjectMemoryRow, ProjectEntityRow } from './types.js';
 
 // ============================================================================
 // Context Suggestions
@@ -16,7 +17,7 @@ export function suggestFromContext(db: Database.Database, contextText: string, p
   if (words.length === 0) return { suggestions: [], reason: 'No meaningful keywords in context' };
 
   const likeConditions = words.map(() => '(content LIKE ? OR tags LIKE ?)').join(' OR ');
-  const params: any[] = [];
+  const params: string[] = [];
   for (const word of words) {
     params.push(`%${sanitizeLikePattern(word)}%`, `%${sanitizeLikePattern(word)}%`);
   }
@@ -25,7 +26,7 @@ export function suggestFromContext(db: Database.Database, contextText: string, p
     SELECT id, content, type, tags, confidence, importance FROM memories
     WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global') AND (${likeConditions})
     ORDER BY importance DESC, confidence DESC LIMIT ?
-  `).all(projectId, ...params, limit) as any[];
+  `).all(projectId, ...params, limit) as MemoryRow[];
 
   return {
     context: contextText.slice(0, 100) + (contextText.length > 100 ? '...' : ''),
@@ -54,40 +55,40 @@ export function getStats(db: Database.Database, projectId?: string) {
     memoryCounts = db.prepare(`
       SELECT COUNT(*) as total, SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) as active
       FROM memories WHERE (project_id = ? OR project_id = 'global')
-    `).get(project) as any;
+    `).get(project) as MemoryCountsRow;
     entityCount = db.prepare(`
       SELECT COUNT(*) as count FROM entities WHERE (project_id = ? OR project_id = 'global')
-    `).get(project) as any;
+    `).get(project) as CountRow;
     edgeCount = db.prepare(`
       SELECT COUNT(*) as count FROM edges WHERE (project_id = ? OR project_id = 'global')
-    `).get(project) as any;
+    `).get(project) as CountRow;
     avgConfidence = db.prepare(`
       SELECT AVG(confidence) as avg FROM memories
       WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global')
-    `).get(project) as any;
+    `).get(project) as AvgConfidenceRow;
     contradictionEdges = db.prepare(`
       SELECT COUNT(*) as count FROM edges
       WHERE relation_type LIKE 'contradiction_%' AND (project_id = ? OR project_id = 'global')
-    `).get(project) as any;
+    `).get(project) as CountRow;
     withEmbeddings = db.prepare(`
       SELECT COUNT(*) as count FROM memories
       WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global') AND embedding IS NOT NULL
-    `).get(project) as any;
+    `).get(project) as CountRow;
     typeBreakdown = db.prepare(`
       SELECT type, COUNT(*) as count FROM memories
       WHERE deleted_at IS NULL AND (project_id = ? OR project_id = 'global')
       GROUP BY type ORDER BY count DESC
-    `).all(project) as any[];
+    `).all(project) as TypeCountRow[];
   } else {
     memoryCounts = db.prepare(`
       SELECT COUNT(*) as total, SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END) as active FROM memories
-    `).get() as any;
-    entityCount = db.prepare(`SELECT COUNT(*) as count FROM entities`).get() as any;
-    edgeCount = db.prepare(`SELECT COUNT(*) as count FROM edges`).get() as any;
-    avgConfidence = db.prepare(`SELECT AVG(confidence) as avg FROM memories WHERE deleted_at IS NULL`).get() as any;
-    contradictionEdges = db.prepare(`SELECT COUNT(*) as count FROM edges WHERE relation_type LIKE 'contradiction_%'`).get() as any;
-    withEmbeddings = db.prepare(`SELECT COUNT(*) as count FROM memories WHERE deleted_at IS NULL AND embedding IS NOT NULL`).get() as any;
-    typeBreakdown = db.prepare(`SELECT type, COUNT(*) as count FROM memories WHERE deleted_at IS NULL GROUP BY type ORDER BY count DESC`).all() as any[];
+    `).get() as MemoryCountsRow;
+    entityCount = db.prepare(`SELECT COUNT(*) as count FROM entities`).get() as CountRow;
+    edgeCount = db.prepare(`SELECT COUNT(*) as count FROM edges`).get() as CountRow;
+    avgConfidence = db.prepare(`SELECT AVG(confidence) as avg FROM memories WHERE deleted_at IS NULL`).get() as AvgConfidenceRow;
+    contradictionEdges = db.prepare(`SELECT COUNT(*) as count FROM edges WHERE relation_type LIKE 'contradiction_%'`).get() as CountRow;
+    withEmbeddings = db.prepare(`SELECT COUNT(*) as count FROM memories WHERE deleted_at IS NULL AND embedding IS NOT NULL`).get() as CountRow;
+    typeBreakdown = db.prepare(`SELECT type, COUNT(*) as count FROM memories WHERE deleted_at IS NULL GROUP BY type ORDER BY count DESC`).all() as TypeCountRow[];
   }
 
   return {
@@ -117,19 +118,19 @@ export function listProjects(db: Database.Database, currentProjectId: string) {
     FROM memories WHERE deleted_at IS NULL
     GROUP BY project_id
     ORDER BY last_activity DESC
-  `).all() as any[];
+  `).all() as ProjectMemoryRow[];
 
   const entityProjects = db.prepare(`
     SELECT project_id, COUNT(*) as entity_count
     FROM entities
     GROUP BY project_id
-  `).all() as any[];
+  `).all() as ProjectEntityRow[];
 
-  const entityMap = new Map(entityProjects.map((e: any) => [e.project_id, e.entity_count]));
+  const entityMap = new Map(entityProjects.map(e => [e.project_id, e.entity_count]));
 
   return {
     current: currentProjectId,
-    projects: memoryProjects.map((p: any) => ({
+    projects: memoryProjects.map(p => ({
       id: p.project_id,
       memoryCount: p.memory_count,
       entityCount: entityMap.get(p.project_id) || 0,

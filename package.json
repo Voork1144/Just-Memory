@@ -1,25 +1,25 @@
 {
   "name": "just-memory",
-  "version": "4.3.4",
+  "version": "5.0.0",
   "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
-  "main": "dist-v2.1/just-memory-v2.1.js",
-  "types": "dist-v2.1/just-memory-v2.1.d.ts",
+  "main": "dist/just-memory-v2.1.js",
+  "types": "dist/just-memory-v2.1.d.ts",
   "bin": {
-    "just-memory": "dist-v2.1/just-memory-v2.1.js"
+    "just-memory": "dist/just-memory-v2.1.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.v2.1.json",
-    "build:watch": "tsc -p tsconfig.v2.1.json --watch",
-    "start": "node dist-v2.1/just-memory-v2.1.js",
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "start": "node dist/just-memory-v2.1.js",
     "dev": "tsx src/just-memory-v2.1.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:quick": "tsx --test tests/config.test.ts tests/validation.test.ts",
     "test:deps": "node -e \"console.log('Dependencies loaded successfully')\"",
     "lint": "eslint src/",
-    "clean": "rimraf dist-v2.1",
+    "clean": "rimraf dist",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -45,13 +45,13 @@
   },
   "exports": {
     ".": {
-      "types": "./dist-v2.1/just-memory-v2.1.d.ts",
-      "default": "./dist-v2.1/just-memory-v2.1.js"
+      "types": "./dist/just-memory-v2.1.d.ts",
+      "default": "./dist/just-memory-v2.1.js"
     }
   },
   "files": [
-    "dist-v2.1/**/*.js",
-    "dist-v2.1/**/*.d.ts",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"
@@ -60,12 +60,12 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@huggingface/transformers": "^3.8.0",
     "better-sqlite3": "^12.6.2",
-    "sqlite-vec": "^0.1.7-alpha.2"
+    "sqlite-vec": "0.1.7-alpha.2"
   },
   "optionalDependencies": {
-    "sqlite-vec-linux-x64": "^0.1.7-alpha.2",
-    "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-win32-x64": "^0.1.7-alpha.2"
+    "sqlite-vec-linux-x64": "0.1.7-alpha.2",
+    "sqlite-vec-darwin-arm64": "0.1.7-alpha.2",
+    "sqlite-vec-win32-x64": "0.1.7-alpha.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

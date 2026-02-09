@@ -5,6 +5,7 @@ node_modules/
 *.db-wal
 *.tsbuildinfo
 .ruff_cache/
+dist/
 dist-v2.1/
 *.py
 *.bak

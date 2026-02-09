@@ -1,11 +1,12 @@
 /**
- * Just-Memory v4.3 — Tool Logging
+ * Just-Memory v5.0 — Tool Logging
  * Tool call logging, stats, and history queries.
  * Extracted from monolith — pure functions with db parameter injection.
  */
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { TOOL_LOG_MAX_OUTPUT, safeParse } from './config.js';
+import type { ToolCallRow, ToolStatsRow, ToolSummaryRow, ToolStatsResult, ToolHistoryEntry } from './types.js';
 
 // ============================================================================
 // Helpers
@@ -27,12 +28,14 @@ export function truncateForLog(str: string, maxLen: number = TOOL_LOG_MAX_OUTPUT
 export function logToolCall(
   db: Database.Database,
   toolName: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args/output are arbitrary JSON from MCP wire
   args: any,
-  output: any,
+  output: unknown,
   success: boolean,
   error: string | null,
   durationMs: number,
   projectId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- session updater receives raw args
   sessionUpdater?: (toolName: string, args: any) => void,
 ): string {
   const id = randomUUID();
@@ -63,7 +66,7 @@ export function logToolCall(
 // Stats
 // ============================================================================
 
-export function getToolStats(db: Database.Database, projectId?: string): any {
+export function getToolStats(db: Database.Database, projectId?: string): ToolStatsResult {
   const effectiveProject = projectId ? projectId : null;
 
   // Get aggregate stats
@@ -115,8 +118,8 @@ export function getToolStats(db: Database.Database, projectId?: string): any {
        FROM tool_calls`;
 
   const summary = effectiveProject
-    ? db.prepare(summaryQuery).get(effectiveProject) as any
-    : db.prepare(summaryQuery).get() as any;
+    ? db.prepare(summaryQuery).get(effectiveProject) as ToolSummaryRow | undefined
+    : db.prepare(summaryQuery).get() as ToolSummaryRow | undefined;
 
   return {
     summary: {
@@ -126,7 +129,7 @@ export function getToolStats(db: Database.Database, projectId?: string): any {
       success_rate: summary?.total_calls ? ((summary.successful / summary.total_calls) * 100).toFixed(1) + '%' : 'N/A',
       avg_duration_ms: summary?.avg_duration_ms ? Math.round(summary.avg_duration_ms) : 0
     },
-    by_tool: stats.map((s: any) => ({
+    by_tool: (stats as ToolStatsRow[]).map(s => ({
       tool: s.tool_name,
       calls: s.total_calls,
       successful: s.successful,
@@ -152,9 +155,9 @@ export function getToolHistory(
   since?: string,
   limit: number = 50,
   projectId?: string
-): any[] {
+): ToolHistoryEntry[] {
   let query = 'SELECT * FROM tool_calls WHERE 1=1';
-  const params: any[] = [];
+  const params: (string | number)[] = [];
 
   if (toolName) {
     query += ' AND tool_name = ?';
@@ -176,7 +179,7 @@ export function getToolHistory(
   query += ' ORDER BY timestamp DESC LIMIT ?';
   params.push(Math.min(limit, 200));
 
-  const rows = db.prepare(query).all(...params) as any[];
+  const rows = db.prepare(query).all(...params) as ToolCallRow[];
 
   return rows.map(r => ({
     id: r.id,

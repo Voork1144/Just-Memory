@@ -1,5 +1,5 @@
 /**
- * Just-Memory v4.3 — Tool Handlers
+ * Just-Memory — Tool Handlers
  * Dispatches MCP tool calls to the appropriate handler functions.
  * Extracted from monolith — uses ToolDispatch interface for dependency injection.
  *
@@ -8,6 +8,55 @@
  * or any other monolith state.
  */
 
+import type {
+  MemorySummary,
+  ToolHistoryEntry,
+  StoreMemoryResult,
+  RecallMemoryResult,
+  UpdateMemoryResult,
+  DeleteMemoryResult,
+  ProactiveContradictionResult,
+  ConfirmMemoryResult,
+  ContradictMemoryResult,
+  CreateEdgeResult,
+  EdgeWithParsedMetadata,
+  InvalidateEdgeResult,
+  ScratchSetResult,
+  ScratchGetResult,
+  ScratchDeleteResult,
+  ScratchListResult,
+  ScratchClearResult,
+  CreateEntityResult,
+  GetEntityResult,
+  EntitySearchEntry,
+  ObserveEntityResult,
+  DeleteEntityResult,
+  LinkEntitiesResult,
+  DefineEntityTypeResult,
+  TypeHierarchyResult,
+  EntityTypeEntry,
+  TypeHierarchySearchResult,
+  SuggestFromContextResult,
+  CreateScheduledTaskResult,
+  ListScheduledTasksResult,
+  CheckDueTasksResult,
+  CompleteScheduledTaskResult,
+  CancelScheduledTaskResult,
+  ScanContradictionsResult,
+  PendingResolutionsResult,
+  ResolveContradictionResult,
+  BackupResult,
+  RestoreResult,
+  ListBackupsResult,
+  StatsResult,
+  BriefingResult,
+  TaskState,
+  ListProjectsResult,
+  SetProjectResult,
+  HealthResult,
+  ToolResultBase,
+} from './types.js';
+
 // ============================================================================
 // ToolDispatch Interface
 // ============================================================================
@@ -15,105 +64,108 @@
 /**
  * All operations the tool handler dispatch needs.
  * The monolith builds this object from its wrapper functions.
+ *
+ * Return types use unions where methods can return either an error object
+ * or a success result. ToolResultBase captures the { error } fallback.
  */
 export interface ToolDispatch {
   // Memory CRUD
-  storeMemory(content: string, type?: string, tags?: string[], importance?: number, confidence?: number, projectId?: string): Promise<any>;
-  recallMemory(id: string, projectId?: string): any;
-  updateMemory(id: string, updates: { content?: string; type?: string; tags?: string[]; importance?: number; confidence?: number }, projectId?: string): Promise<any>;
-  deleteMemory(id: string, permanent?: boolean, projectId?: string): any;
-  findContradictionsProactive(content: string, projectId?: string, limit?: number): Promise<any>;
+  storeMemory(content: string, type?: string, tags?: string[], importance?: number, confidence?: number, projectId?: string): Promise<StoreMemoryResult>;
+  recallMemory(id: string, projectId?: string): RecallMemoryResult | ToolResultBase;
+  updateMemory(id: string, updates: { content?: string; type?: string; tags?: string[]; importance?: number; confidence?: number }, projectId?: string): Promise<UpdateMemoryResult | ToolResultBase>;
+  deleteMemory(id: string, permanent?: boolean, projectId?: string): DeleteMemoryResult | ToolResultBase;
+  findContradictionsProactive(content: string, projectId?: string, limit?: number): Promise<ProactiveContradictionResult>;
 
   // Search
-  hybridSearch(query: string, projectId: string, limit?: number, confidenceThreshold?: number): Promise<any>;
-  listMemories(projectId?: string, limit?: number, includeDeleted?: boolean): any;
+  hybridSearch(query: string, projectId: string, limit?: number, confidenceThreshold?: number): Promise<MemorySummary[]>;
+  listMemories(projectId?: string, limit?: number, includeDeleted?: boolean): MemorySummary[];
 
   // Confidence
-  confirmMemory(id: string, sourceId?: string, projectId?: string): any;
-  contradictMemory(id: string, contradictingId?: string, projectId?: string): any;
+  confirmMemory(id: string, sourceId?: string, projectId?: string): ConfirmMemoryResult | ToolResultBase;
+  contradictMemory(id: string, contradictingId?: string, projectId?: string): ContradictMemoryResult | ToolResultBase;
 
   // Edges
-  createEdge(fromId: string, toId: string, relationType: string, confidence?: number, metadata?: any, projectId?: string): any;
-  queryEdges(memoryId: string, direction?: string, projectId?: string): any;
-  invalidateEdge(edgeId: string): any;
+  createEdge(fromId: string, toId: string, relationType: string, confidence?: number, metadata?: Record<string, unknown>, projectId?: string): CreateEdgeResult;
+  queryEdges(memoryId: string, direction?: string, projectId?: string): EdgeWithParsedMetadata[];
+  invalidateEdge(edgeId: string): InvalidateEdgeResult;
 
   // Scratchpad
-  scratchSet(key: string, value: string, ttlSeconds?: number, projectId?: string): any;
-  scratchGet(key: string, projectId?: string): any;
-  scratchDelete(key: string, projectId?: string): any;
-  scratchList(projectId?: string): any;
-  scratchClear(projectId?: string): any;
+  scratchSet(key: string, value: string, ttlSeconds?: number, projectId?: string): ScratchSetResult;
+  scratchGet(key: string, projectId?: string): ScratchGetResult;
+  scratchDelete(key: string, projectId?: string): ScratchDeleteResult;
+  scratchList(projectId?: string): ScratchListResult;
+  scratchClear(projectId?: string): ScratchClearResult;
 
   // Entities
-  createEntity(name: string, entityType?: string, observations?: string[], projectId?: string): any;
-  getEntity(name: string, projectId?: string): any;
-  searchEntities(query: string, entityType?: string, projectId?: string, limit?: number): any;
-  observeEntity(name: string, observations: string[], projectId?: string): any;
-  deleteEntity(name: string, projectId?: string): any;
-  linkEntities(from: string, relationType: string, to: string, projectId?: string): any;
-  defineEntityType(name: string, parentType?: string, description?: string): any;
-  getTypeHierarchy(typeName: string): any;
-  listEntityTypes(): any;
-  searchEntitiesByTypeHierarchy(entityType: string, query?: string, projectId?: string, limit?: number): any;
+  createEntity(name: string, entityType?: string, observations?: string[], projectId?: string): CreateEntityResult;
+  getEntity(name: string, projectId?: string): GetEntityResult | ToolResultBase;
+  searchEntities(query: string, entityType?: string, projectId?: string, limit?: number): EntitySearchEntry[];
+  observeEntity(name: string, observations: string[], projectId?: string): ObserveEntityResult | ToolResultBase;
+  deleteEntity(name: string, projectId?: string): DeleteEntityResult | ToolResultBase;
+  linkEntities(from: string, relationType: string, to: string, projectId?: string): LinkEntitiesResult;
+  defineEntityType(name: string, parentType?: string, description?: string): DefineEntityTypeResult;
+  getTypeHierarchy(typeName: string): TypeHierarchyResult | ToolResultBase;
+  listEntityTypes(): EntityTypeEntry[];
+  searchEntitiesByTypeHierarchy(entityType: string, query?: string, projectId?: string, limit?: number): TypeHierarchySearchResult;
 
   // Suggestions
-  suggestFromContext(contextText: string, projectId?: string, limit?: number): any;
+  suggestFromContext(contextText: string, projectId?: string, limit?: number): SuggestFromContextResult;
 
   // Scheduled Tasks
-  createScheduledTask(title: string, schedule: string, description?: string, recurring?: boolean, actionType?: string, actionData?: any, memoryId?: string, projectId?: string): any;
-  listScheduledTasks(status?: string, projectId?: string, limit?: number): any;
-  checkDueTasks(projectId?: string): any;
-  completeScheduledTask(taskId: string): any;
-  cancelScheduledTask(taskId: string): any;
+  createScheduledTask(title: string, schedule: string, description?: string, recurring?: boolean, actionType?: string, actionData?: Record<string, unknown>, memoryId?: string, projectId?: string): CreateScheduledTaskResult;
+  listScheduledTasks(status?: string, projectId?: string, limit?: number): ListScheduledTasksResult;
+  checkDueTasks(projectId?: string): CheckDueTasksResult;
+  completeScheduledTask(taskId: string): CompleteScheduledTaskResult;
+  cancelScheduledTask(taskId: string): CancelScheduledTaskResult;
 
   // Contradictions
-  scanContradictions(projectId?: string, autoCreate?: boolean): any;
-  getPendingResolutions(projectId?: string, limit?: number): any;
-  resolveContradiction(resolutionId: string, resolutionType: string, note?: string, mergedContent?: string): any;
+  scanContradictions(projectId?: string, autoCreate?: boolean): ScanContradictionsResult;
+  getPendingResolutions(projectId?: string, limit?: number): PendingResolutionsResult;
+  resolveContradiction(resolutionId: string, resolutionType: string, note?: string, mergedContent?: string): ResolveContradictionResult;
 
   // Backup
-  backupMemories(projectId?: string): any;
-  restoreMemories(path: string, mode?: string, targetProject?: string): any;
-  listBackups(): any;
+  backupMemories(projectId?: string): BackupResult;
+  restoreMemories(path: string, mode?: string, targetProject?: string): RestoreResult;
+  listBackups(): ListBackupsResult;
 
   // Stats
-  getStats(projectId?: string): any;
-  getToolHistory(toolName?: string, success?: boolean, since?: string, limit?: number, projectId?: string): any[];
+  getStats(projectId?: string): StatsResult;
+  getToolHistory(toolName?: string, success?: boolean, since?: string, limit?: number, projectId?: string): ToolHistoryEntry[];
 
   // Embeddings
   reembedOrphaned(projectId?: string, limit?: number, forceRebuild?: boolean): Promise<number>;
 
   // Briefing
-  getBriefingResult(projectId?: string, maxTokens?: number): any;
+  getBriefingResult(projectId?: string, maxTokens?: number): BriefingResult;
 
   // Task tracking
   setCurrentTask(description: string, totalSteps?: number): void;
   updateTaskProgress(step: number, stepDescription: string): void;
   clearCurrentTask(): void;
-  getCurrentTask(): any;
+  getCurrentTask(): TaskState | null;
 
   // Projects
-  listProjects(): any;
-  setCurrentProject(projectId: string, path?: string): any;
+  listProjects(): ListProjectsResult;
+  setCurrentProject(projectId: string, path?: string): SetProjectResult;
 
   // Health
-  getHealthInfo(): Promise<any>;
+  getHealthInfo(): Promise<HealthResult>;
 
-  // Chat
-  discoverConversations(basePath?: string): any;
-  parseAndIngest(filePath: string, projectId?: string): any;
-  ingestAll(projectId?: string, basePath?: string): any;
-  ingestExport(filePath: string, projectId?: string): any;
-  getConversationStats(projectId?: string): any;
-  searchConversations(query: string, projectId?: string, limit?: number): any;
-  getConversation(conversationId: string): any;
-  listConversations(projectId?: string, limit?: number): any;
-  extractFacts(conversationId: string, projectId?: string): any;
-  extractFactsBatch(projectId?: string, limit?: number): any;
-  summarizeConversation(conversationId: string, projectId?: string): Promise<any>;
-  summarizeBatch(projectId?: string, limit?: number): Promise<any>;
-  searchSummaries(query: string, projectId?: string, limit?: number): any;
-  extractTopics(conversationId: string, projectId?: string): any;
+  // Chat — chat ingestion returns various shapes (arrays, objects, null)
+  discoverConversations(basePath?: string): string[];
+  parseAndIngest(filePath: string, projectId?: string): unknown;
+  ingestAll(projectId?: string, basePath?: string): unknown;
+  ingestExport(filePath: string, projectId?: string): unknown;
+  getConversationStats(projectId?: string): unknown;
+  searchConversations(query: string, projectId?: string, limit?: number): unknown;
+  getConversation(conversationId: string): unknown;
+  listConversations(projectId?: string, limit?: number): unknown;
+  extractFacts(conversationId: string, projectId?: string): unknown;
+  extractFactsBatch(projectId?: string, limit?: number): unknown;
+  summarizeConversation(conversationId: string, projectId?: string): Promise<unknown>;
+  summarizeBatch(projectId?: string, limit?: number): Promise<unknown>;
+  searchSummaries(query: string, projectId?: string, limit?: number): unknown;
+  extractTopics(conversationId: string, projectId?: string): unknown;
 
   // Project-aware helpers
   getEffectiveProject(projectId?: string): string;
@@ -130,9 +182,10 @@ export interface ToolDispatch {
  */
 export async function dispatchToolCall(
   name: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON from the wire
   args: any,
   d: ToolDispatch,
-): Promise<any> {
+): Promise<unknown> {
   switch (name) {
     // ---- Memory CRUD ----
     case 'memory_store':
@@ -336,7 +389,8 @@ export async function dispatchToolCall(
 // Sub-dispatchers for deeply nested switches
 // ============================================================================
 
-function dispatchEntity(args: any, d: ToolDispatch): any {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON
+function dispatchEntity(args: any, d: ToolDispatch): unknown {
   switch (args.action) {
     case 'create': {
       // v3.13: Normalize observations array (handle MCP serialization)
@@ -372,7 +426,8 @@ function dispatchEntity(args: any, d: ToolDispatch): any {
   }
 }
 
-function dispatchEntityTypes(args: any, d: ToolDispatch): any {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON
+function dispatchEntityTypes(args: any, d: ToolDispatch): unknown {
   switch (args.type_action) {
     case 'define':
       return d.defineEntityType(args.type_name, args.parent_type, args.type_description);
@@ -387,11 +442,12 @@ function dispatchEntityTypes(args: any, d: ToolDispatch): any {
   }
 }
 
-function dispatchChat(args: any, d: ToolDispatch): any | Promise<any> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON
+function dispatchChat(args: any, d: ToolDispatch): unknown | Promise<unknown> {
   switch (args.action) {
     case 'discover': {
       const files = d.discoverConversations(args.base_path);
-      return { files, count: (files as any[]).length };
+      return { files, count: files.length };
     }
     case 'ingest':
       return d.parseAndIngest(args.file_path, args.project_id);

@@ -1,6 +1,6 @@
-# Just-Memory v4.3.4
+# Just-Memory
 
-> A persistent memory MCP server for Claude Desktop and Claude Code — semantic search, knowledge graphs, confidence scoring, contradiction detection, and session context across conversations.
+> A persistent memory MCP server for Claude Desktop and Claude Code -- semantic search, knowledge graphs, confidence scoring, contradiction detection, and session context across conversations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
@@ -9,7 +9,7 @@
 
 ## What It Does
 
-Claude forgets everything between sessions. Just-Memory provides 23 tools that give Claude persistent memory:
+Claude forgets everything between sessions. Just-Memory provides 22 tools that give Claude persistent memory:
 
 - **Semantic search** — e5-large-v2 embeddings (1024-dim) with HNSW indexing via sqlite-vec
 - **Knowledge graph** — Named entities with observations, typed relations, and temporal edges
@@ -25,7 +25,13 @@ Claude forgets everything between sessions. Just-Memory provides 23 tools that g
 - Node.js 18+
 - Claude Desktop or Claude Code
 
-### Setup
+### Via npm (recommended)
+
+```bash
+npm install -g just-memory
+```
+
+### From source
 
 ```bash
 git clone https://github.com/Voork1144/Just-Memory.git
@@ -49,7 +55,7 @@ Add to your Claude Desktop config file:
   "mcpServers": {
     "just-memory": {
       "command": "node",
-      "args": ["/path/to/Just-Memory/dist-v2.1/just-memory-v2.1.js"]
+      "args": ["/path/to/Just-Memory/dist/just-memory-v2.1.js"]
     }
   }
 }
@@ -57,7 +63,7 @@ Add to your Claude Desktop config file:
 
 Replace `/path/to/Just-Memory` with the actual path where you cloned the repository. Restart Claude Desktop after configuration.
 
-## Tools (23)
+## Tools (22)
 
 ### Core Memory (7 tools)
 
@@ -122,7 +128,7 @@ Example with environment variables:
   "mcpServers": {
     "just-memory": {
       "command": "node",
-      "args": ["/path/to/Just-Memory/dist-v2.1/just-memory-v2.1.js"],
+      "args": ["/path/to/Just-Memory/dist/just-memory-v2.1.js"],
       "env": {
         "JUST_MEMORY_EMBEDDING": "small",
         "JUST_MEMORY_QDRANT": "false"
@@ -134,7 +140,7 @@ Example with environment variables:
 
 ## Architecture
 
-23 TypeScript source modules with dependency injection via a `ToolDispatch` interface:
+TypeScript source modules with dependency injection via a `ToolDispatch` interface:
 
 - **Orchestrator** (`just-memory-v2.1.ts`) — MCP server lifecycle, DB setup, consolidation timer
 - **Business logic** — `memory.ts`, `search.ts`, `entities.ts`, `contradiction.ts`, `consolidation.ts`, `chat-ingestion.ts`, `session.ts`
@@ -191,6 +197,22 @@ npm run build
 ```
 
 Then restart Claude Desktop or Claude Code to pick up the changes.
+
+## Requirements
+
+- **Node.js** 18.0.0 or higher
+- **C++ compiler** for `better-sqlite3` native addon (see Troubleshooting)
+- **Disk space**: ~500MB for the e5-large-v2 model (downloaded on first run), or ~100MB with `JUST_MEMORY_EMBEDDING=small`
+
+## Known Limitations
+
+- **Single-user**: Designed for one Claude instance per database. Concurrent access from multiple MCP clients to the same database is not supported.
+- **sqlite-vec alpha**: The vector search extension is at `0.1.7-alpha.2`. Pinned to exact version to avoid breaking changes.
+- **No remote DB**: Storage is local SQLite only. Qdrant support is optional and runs as a local sidecar process.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR guidelines.
 
 ## License
 

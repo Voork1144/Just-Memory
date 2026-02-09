@@ -1,11 +1,12 @@
 /**
- * Just-Memory Session & Crash Recovery (v4.0)
+ * Just-Memory — Session & Crash Recovery
  * Tracks session state for recovery after crashes, compaction, or session loss.
  */
 import Database from 'better-sqlite3';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { BACKUP_DIR } from './config.js';
+import type { CrashState } from './types.js';
 
 export const SESSION_STATE_KEYS = {
   LAST_HEARTBEAT: '_jm_last_heartbeat',
@@ -33,6 +34,7 @@ export function updateSessionHeartbeat(db: Database.Database, projectId: string)
   } catch (e) { console.error('[Just-Memory] session state write error:', e); }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP args are untyped JSON
 export function updateSessionState(db: Database.Database, projectId: string, toolName: string, args: any): void {
   try {
     db.prepare(`INSERT OR REPLACE INTO scratchpad (key, project_id, value, expires_at) VALUES (?, ?, ?, NULL)`)
@@ -58,10 +60,7 @@ export function updateSessionState(db: Database.Database, projectId: string, too
   } catch (e) { console.error('[Just-Memory] session state write error:', e); }
 }
 
-export function detectCrashStateForBriefing(db: Database.Database, projectId: string): {
-  crashed: boolean; lastHeartbeat?: string; lastTool?: any; workingFiles?: string[];
-  sessionStart?: string; previousSessionId?: string;
-} {
+export function detectCrashStateForBriefing(db: Database.Database, projectId: string): CrashState {
   try {
     if (crashAlreadyReported) return { crashed: false };
 

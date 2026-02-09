@@ -9,6 +9,7 @@ import {
   MAX_SENTENCE_LENGTH, MAX_WORD_ARRAY_SIZE,
 } from './config.js';
 import { generateEmbedding, checkContradictionNLI, getModelState } from './models.js';
+import type { MemoryRow } from './types.js';
 
 // ============================================================================
 // Fact Extraction
@@ -214,7 +215,7 @@ export function cosineSimilarity(a: Buffer, b: Buffer): number {
   if (!isValidEmbedding(a) || !isValidEmbedding(b)) {
     // Dimension mismatch - log once and return 0
     if (a.length !== b.length) {
-      console.error(`[Just-Memory v4.0] Embedding dimension mismatch: ${a.length / 4} vs ${b.length / 4} (expected ${EMBEDDING_DIM})`);
+      console.error(`[Just-Memory] Embedding dimension mismatch: ${a.length / 4} vs ${b.length / 4} (expected ${EMBEDDING_DIM})`);
     }
     return 0;
   }
@@ -228,7 +229,7 @@ export function cosineSimilarity(a: Buffer, b: Buffer): number {
   const requiredBytesA = a.byteOffset + elementCountA * 4;
   const requiredBytesB = b.byteOffset + elementCountB * 4;
   if (requiredBytesA > a.buffer.byteLength || requiredBytesB > b.buffer.byteLength) {
-    console.error('[Just-Memory v4.0] Buffer bounds violation in cosineSimilarity');
+    console.error('[Just-Memory] Buffer bounds violation in cosineSimilarity');
     return 0;
   }
 
@@ -276,7 +277,7 @@ export async function findContradictionsEnhanced(
 
   // Get all active memories in project
   let sql = 'SELECT * FROM memories WHERE deleted_at IS NULL AND (project_id = ? OR project_id = \'global\')';
-  const params: any[] = [projectId];
+  const params: (string | number)[] = [projectId];
   if (excludeId) {
     sql += ' AND id != ?';
     params.push(excludeId);
@@ -302,7 +303,7 @@ export async function findContradictionsEnhanced(
     sql += ' ORDER BY created_at DESC LIMIT 200';
   }
 
-  const allMemories = db.prepare(sql).all(...params) as any[];
+  const allMemories = db.prepare(sql).all(...params) as MemoryRow[];
 
   for (const memory of allMemories) {
     const memoryLower = memory.content.toLowerCase();
@@ -422,7 +423,7 @@ export async function findContradictionsEnhanced(
         }
       } catch (nliError: any) {
         // NLI failure is non-fatal - log and continue without NLI result
-        console.error(`[Just-Memory v4.0] NLI check failed for memory ${memory.id}: ${nliError.message}`);
+        console.error(`[Just-Memory] NLI check failed for memory ${memory.id}: ${nliError.message}`);
       }
     }
   }

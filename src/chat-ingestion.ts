@@ -24,12 +24,49 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { join, basename, dirname } from 'path';
+import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from 'fs';
+import { join, basename, dirname, resolve, sep } from 'path';
 import { homedir } from 'os';
 import { sanitizeLikePattern } from './validation.js';
 import { generateEmbedding, generateSummary } from './models.js';
 import { SUMMARIZATION_MODEL } from './config.js';
+
+// ============================================================================
+// Path Validation
+// ============================================================================
+
+/** Allowed base directories for chat file ingestion */
+const ALLOWED_CHAT_BASES = [
+  join(homedir(), '.claude'),
+  join(homedir(), '.config', 'Claude'),
+  join(homedir(), 'Library', 'Application Support', 'Claude'),
+  join(homedir(), 'AppData', 'Roaming', 'Claude'),
+];
+
+/**
+ * Validate that a file path resolves to within an allowed base directory.
+ * Prevents path traversal attacks via symlinks or ../../ sequences.
+ * Returns the resolved real path or null if invalid.
+ */
+function validateChatFilePath(filePath: string): string | null {
+  try {
+    const resolved = resolve(filePath);
+    // Must exist to check real path
+    if (!existsSync(resolved)) return null;
+    const realPath = realpathSync(resolved);
+    // Check against allowed bases
+    for (const base of ALLOWED_CHAT_BASES) {
+      const resolvedBase = resolve(base);
+      if (realPath.startsWith(resolvedBase + sep) || realPath === resolvedBase) {
+        return realPath;
+      }
+    }
+    // If no allowed base matched, reject
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // ============================================================================
 // Types
@@ -260,18 +297,20 @@ export function initChatSchema(db: Database.Database): void {
 const MAX_CHAT_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit (matches backup limit)
 
 export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | null {
-  if (!existsSync(filePath)) {
-    console.error(`[Chat Ingestion] File not found: ${filePath}`);
+  // Path traversal protection: validate file is within allowed chat directories
+  const validPath = validateChatFilePath(filePath);
+  if (!validPath) {
+    console.error(`[Chat Ingestion] File path rejected (not within allowed chat directories)`);
     return null;
   }
 
-  const fileSize = statSync(filePath).size;
+  const fileSize = statSync(validPath).size;
   if (fileSize > MAX_CHAT_FILE_SIZE) {
-    console.error(`[Chat Ingestion] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB > 100MB limit): ${filePath}`);
+    console.error(`[Chat Ingestion] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB > 100MB limit)`);
     return null;
   }
 
-  const content = readFileSync(filePath, 'utf-8');
+  const content = readFileSync(validPath, 'utf-8');
   const lines = content.trim().split('\n');
 
   if (lines.length === 0) return null;
@@ -291,7 +330,7 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
     try {
       entry = JSON.parse(line);
     } catch {
-      console.error(`[Chat Ingestion] Failed to parse line: ${line.substring(0, 100)}...`);
+      console.error(`[Chat Ingestion] Failed to parse JSONL line (skipping)`);
       continue;
     }
 
@@ -397,12 +436,12 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
   }
 
   if (messages.length === 0) {
-    console.error(`[Chat Ingestion] No messages found in ${filePath}`);
+    console.error(`[Chat Ingestion] No messages found in file`);
     return null;
   }
 
   return {
-    sessionId: sessionId || basename(filePath, '.jsonl'),
+    sessionId: sessionId || basename(validPath, '.jsonl'),
     source: 'claude-code',
     projectPath,
     startTime: startTime || new Date().toISOString(),
@@ -550,11 +589,37 @@ export function ingestConversation(
 // ============================================================================
 
 export function discoverClaudeCodeConversations(basePath?: string): string[] {
-  const searchPath = basePath || join(homedir(), '.claude', 'projects');
+  const defaultPath = join(homedir(), '.claude', 'projects');
+  const searchPath = basePath || defaultPath;
+
+  // Path traversal protection: if a custom basePath is provided, validate it
+  if (basePath) {
+    const resolvedBase = resolve(basePath);
+    let realBase: string;
+    try {
+      if (!existsSync(resolvedBase)) {
+        console.error(`[Chat Ingestion] Path not found`);
+        return [];
+      }
+      realBase = realpathSync(resolvedBase);
+    } catch {
+      console.error(`[Chat Ingestion] Cannot resolve path`);
+      return [];
+    }
+    const isAllowed = ALLOWED_CHAT_BASES.some(allowed => {
+      const resolvedAllowed = resolve(allowed);
+      return realBase.startsWith(resolvedAllowed + sep) || realBase === resolvedAllowed;
+    });
+    if (!isAllowed) {
+      console.error(`[Chat Ingestion] Base path rejected (not within allowed chat directories)`);
+      return [];
+    }
+  }
+
   const jsonlFiles: string[] = [];
 
   if (!existsSync(searchPath)) {
-    console.error(`[Chat Ingestion] Path not found: ${searchPath}`);
+    console.error(`[Chat Ingestion] Path not found`);
     return [];
   }
 
@@ -776,24 +841,26 @@ interface ClaudeDesktopExportMessage {
 }
 
 export function parseClaudeDesktopExport(filePath: string): ParsedConversation[] {
-  if (!existsSync(filePath)) {
-    console.error(`[Chat Ingestion] File not found: ${filePath}`);
+  // Path traversal protection: validate file is within allowed chat directories
+  const validPath = validateChatFilePath(filePath);
+  if (!validPath) {
+    console.error(`[Chat Ingestion] File path rejected (not within allowed chat directories)`);
     return [];
   }
 
-  const fileSize = statSync(filePath).size;
+  const fileSize = statSync(validPath).size;
   if (fileSize > MAX_CHAT_FILE_SIZE) {
-    console.error(`[Chat Ingestion] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB > 100MB limit): ${filePath}`);
+    console.error(`[Chat Ingestion] File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB > 100MB limit)`);
     return [];
   }
 
-  const content = readFileSync(filePath, 'utf-8');
+  const content = readFileSync(validPath, 'utf-8');
   let data: ClaudeDesktopExportConversation[];
 
   try {
     data = JSON.parse(content);
-  } catch (err) {
-    console.error(`[Chat Ingestion] Failed to parse JSON: ${err}`);
+  } catch {
+    console.error(`[Chat Ingestion] Failed to parse JSON export file`);
     return [];
   }
 

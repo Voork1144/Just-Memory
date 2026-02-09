@@ -16,6 +16,10 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { VectorStore, VectorFilter, VectorResult, VectorMetadata } from './vector-store.js';
+import type {
+  QdrantPoint, QdrantSearchResult, QdrantCollectionInfoResponse,
+  QdrantCollectionConfig, QdrantSearchParams, QdrantFilterCondition, QdrantDeleteSelector,
+} from './types.js';
 
 // ============================================================================
 // Configuration
@@ -63,15 +67,15 @@ export class QdrantStore implements VectorStore {
     try {
       // Check if binary exists
       if (!existsSync(this.opts.binaryPath)) {
-        console.error('[Just-Memory v4.0] Qdrant binary not found at', this.opts.binaryPath);
-        console.error('[Just-Memory v4.0] Install Qdrant: download from https://github.com/qdrant/qdrant/releases');
-        console.error('[Just-Memory v4.0] Place binary at:', this.opts.binaryPath);
+        console.error('[Just-Memory] Qdrant binary not found at', this.opts.binaryPath);
+        console.error('[Just-Memory] Install Qdrant: download from https://github.com/qdrant/qdrant/releases');
+        console.error('[Just-Memory] Place binary at:', this.opts.binaryPath);
         return false;
       }
 
       // Check if Qdrant is already running on this port
       if (await this._healthCheck()) {
-        console.error('[Just-Memory v4.0] Qdrant already running on port', this.opts.port);
+        console.error('[Just-Memory] Qdrant already running on port', this.opts.port);
         this._client = new QdrantClient(this.opts.port);
         await this._ensureCollection();
         this._ready = true;
@@ -100,13 +104,13 @@ export class QdrantStore implements VectorStore {
       });
 
       this.process.on('error', (err) => {
-        console.error('[Just-Memory v4.0] Qdrant process error:', err.message);
+        console.error('[Just-Memory] Qdrant process error:', err.message);
         this._ready = false;
       });
 
       this.process.on('exit', (code) => {
         if (this._ready) {
-          console.error('[Just-Memory v4.0] Qdrant process exited with code', code);
+          console.error('[Just-Memory] Qdrant process exited with code', code);
         }
         this._ready = false;
         this.process = null;
@@ -115,7 +119,7 @@ export class QdrantStore implements VectorStore {
       // Wait for Qdrant to become ready
       const ready = await this._waitForReady();
       if (!ready) {
-        console.error('[Just-Memory v4.0] Qdrant failed to start within timeout');
+        console.error('[Just-Memory] Qdrant failed to start within timeout');
         this._kill();
         return false;
       }
@@ -123,10 +127,10 @@ export class QdrantStore implements VectorStore {
       this._client = new QdrantClient(this.opts.port);
       await this._ensureCollection();
       this._ready = true;
-      console.error(`[Just-Memory v4.0] Qdrant ready on port ${this.opts.port} (${this.opts.embeddingDim}-dim, scalar quantized)`);
+      console.error(`[Just-Memory] Qdrant ready on port ${this.opts.port} (${this.opts.embeddingDim}-dim, scalar quantized)`);
       return true;
     } catch (err: any) {
-      console.error('[Just-Memory v4.0] Qdrant startup failed:', err.message);
+      console.error('[Just-Memory] Qdrant startup failed:', err.message);
       this._kill();
       return false;
     }
@@ -175,31 +179,31 @@ export class QdrantStore implements VectorStore {
   async search(query: Float32Array, limit: number, filter?: VectorFilter): Promise<VectorResult[]> {
     if (!this._client) return [];
 
-    const qdrantFilter: any = { must: [], must_not: [] };
+    const qdrantFilter: { must?: QdrantFilterCondition[]; must_not?: QdrantFilterCondition[] } = { must: [], must_not: [] };
 
     if (filter?.projectId) {
-      qdrantFilter.must.push({
+      qdrantFilter.must!.push({
         key: 'project_id',
         match: { any: [filter.projectId, 'global'] },
       });
     }
 
     if (filter?.excludeDeleted !== false) {
-      qdrantFilter.must_not.push({
+      qdrantFilter.must_not!.push({
         key: 'deleted',
         match: { value: true },
       });
     }
 
     if (filter?.excludeIds && filter.excludeIds.length > 0) {
-      qdrantFilter.must_not.push({
+      qdrantFilter.must_not!.push({
         has_id: filter.excludeIds,
       });
     }
 
     // Clean empty filter arrays
-    if (qdrantFilter.must.length === 0) delete qdrantFilter.must;
-    if (qdrantFilter.must_not.length === 0) delete qdrantFilter.must_not;
+    if (qdrantFilter.must && qdrantFilter.must.length === 0) delete qdrantFilter.must;
+    if (qdrantFilter.must_not && qdrantFilter.must_not.length === 0) delete qdrantFilter.must_not;
 
     const hasFilter = qdrantFilter.must || qdrantFilter.must_not;
 
@@ -286,7 +290,7 @@ export class QdrantStore implements VectorStore {
       await this._client.createPayloadIndex(this.opts.collection, 'project_id', 'keyword');
       await this._client.createPayloadIndex(this.opts.collection, 'deleted', 'bool');
 
-      console.error(`[Just-Memory v4.0] Created Qdrant collection '${this.opts.collection}' (${this.opts.embeddingDim}-dim, int8 quantized)`);
+      console.error(`[Just-Memory] Created Qdrant collection '${this.opts.collection}' (${this.opts.embeddingDim}-dim, int8 quantized)`);
     }
   }
 
@@ -321,7 +325,7 @@ class QdrantClient {
     }
   }
 
-  async createCollection(name: string, config: any): Promise<void> {
+  async createCollection(name: string, config: QdrantCollectionConfig): Promise<void> {
     const res = await fetch(`${this.baseUrl}/collections/${name}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -347,16 +351,16 @@ class QdrantClient {
     }
   }
 
-  async getCollection(name: string): Promise<any> {
+  async getCollection(name: string): Promise<QdrantCollectionInfoResponse> {
     const res = await fetch(`${this.baseUrl}/collections/${name}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) throw new Error(`getCollection failed: ${res.status}`);
-    const data = await res.json() as any;
+    const data = await res.json() as { result: QdrantCollectionInfoResponse };
     return data.result;
   }
 
-  async upsert(collection: string, points: any[]): Promise<void> {
+  async upsert(collection: string, points: QdrantPoint[]): Promise<void> {
     const res = await fetch(`${this.baseUrl}/collections/${collection}/points`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -366,7 +370,7 @@ class QdrantClient {
     if (!res.ok) throw new Error(`upsert failed: ${res.status} ${await res.text()}`);
   }
 
-  async search(collection: string, params: any): Promise<any[]> {
+  async search(collection: string, params: QdrantSearchParams): Promise<QdrantSearchResult[]> {
     const res = await fetch(`${this.baseUrl}/collections/${collection}/points/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -374,11 +378,11 @@ class QdrantClient {
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) throw new Error(`search failed: ${res.status} ${await res.text()}`);
-    const data = await res.json() as any;
+    const data = await res.json() as { result: QdrantSearchResult[] };
     return data.result || [];
   }
 
-  async delete(collection: string, selector: any): Promise<void> {
+  async delete(collection: string, selector: QdrantDeleteSelector): Promise<void> {
     const res = await fetch(`${this.baseUrl}/collections/${collection}/points/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1,10 +1,11 @@
 /**
- * Just-Memory v4.3 — Schema
+ * Just-Memory v5.0 — Schema
  * Database schema creation, migrations, FTS5 setup, vectorlite/HNSW init.
  * Extracted from monolith — functions take db parameter, return status.
  */
 import Database from 'better-sqlite3';
 import { EMBEDDING_DIM } from './config.js';
+import type { CountRow } from './types.js';
 
 // ============================================================================
 // Migrations
@@ -68,14 +69,14 @@ export async function initVectorlite(db: Database.Database, embeddingDim: number
       `);
       hnswIndexReady = true;
       console.error('[Just-Memory] HNSW index ready (vectorlite)');
-    } catch (tableErr: any) {
-      if (!tableErr.message.includes('already exists')) {
+    } catch (tableErr: unknown) {
+      if (tableErr instanceof Error && !tableErr.message.includes('already exists')) {
         console.error('[Just-Memory] HNSW table creation warning:', tableErr.message);
       }
       hnswIndexReady = true;
     }
-  } catch (err: any) {
-    console.error('[Just-Memory] vectorlite not available, using sqlite-vec fallback:', err.message);
+  } catch (err: unknown) {
+    console.error('[Just-Memory] vectorlite not available, using sqlite-vec fallback:', err instanceof Error ? err.message : err);
     _vectorliteLoaded = false;
     hnswIndexReady = false;
   }
@@ -318,7 +319,7 @@ export function createCoreTables(db: Database.Database): void {
 // ============================================================================
 
 export function seedEntityTypes(db: Database.Database): void {
-  const typeCount = (db.prepare('SELECT COUNT(*) as count FROM entity_types').get() as any).count;
+  const typeCount = (db.prepare('SELECT COUNT(*) as count FROM entity_types').get() as CountRow).count;
   if (typeCount === 0) {
     const defaultTypes = [
       { name: 'concept', parent: null, description: 'Abstract idea or notion' },
@@ -346,7 +347,7 @@ export function runLegacyCleanup(db: Database.Database): void {
   const systemBloatCount = (db.prepare(`
     SELECT COUNT(*) as count FROM memories
     WHERE type = 'system' AND content LIKE '%consolidation_run%'
-  `).get() as any)?.count || 0;
+  `).get() as CountRow | undefined)?.count || 0;
 
   if (systemBloatCount > 20) {
     console.error(`[Just-Memory] Cleaning up ${systemBloatCount} legacy consolidation_run system memories...`);
@@ -401,16 +402,16 @@ export function initFTS5(db: Database.Database): boolean {
     `);
 
     // Backfill: populate FTS5 with existing memories if empty
-    const ftsCount = (db.prepare('SELECT COUNT(*) as count FROM memories_fts').get() as any).count;
-    const memCount = (db.prepare('SELECT COUNT(*) as count FROM memories WHERE deleted_at IS NULL').get() as any).count;
+    const ftsCount = (db.prepare('SELECT COUNT(*) as count FROM memories_fts').get() as CountRow).count;
+    const memCount = (db.prepare('SELECT COUNT(*) as count FROM memories WHERE deleted_at IS NULL').get() as CountRow).count;
     if (ftsCount === 0 && memCount > 0) {
       console.error(`[Just-Memory] Backfilling FTS5 index with ${memCount} memories...`);
       db.exec(`INSERT INTO memories_fts(rowid, id, content, project_id) SELECT rowid, id, content, project_id FROM memories WHERE deleted_at IS NULL`);
       console.error('[Just-Memory] FTS5 backfill complete');
     }
     return true;
-  } catch (err: any) {
-    console.error('[Just-Memory] FTS5 not available, using LIKE fallback:', err.message);
+  } catch (err: unknown) {
+    console.error('[Just-Memory] FTS5 not available, using LIKE fallback:', err instanceof Error ? err.message : err);
     return false;
   }
 }

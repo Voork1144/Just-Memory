@@ -2,6 +2,39 @@
 
 All notable changes to Just-Memory are documented here.
 
+## [5.0.0] - 2026-02-08
+
+### Breaking Changes
+- Renamed `dist-v2.1/` to `dist/` (update any direct path references)
+- Renamed `tsconfig.v2.1.json` to `tsconfig.build.json`
+- Removed stale root `tsconfig.json` (build uses `tsconfig.build.json`)
+
+### Added
+- Comprehensive type system (`src/types.ts`) with 50+ typed interfaces replacing `any` returns
+- ESLint expanded to cover all `src/**/*.ts` files (was only the main entry)
+- Security: input validation for `type`, `relation_type`, scratchpad `key` length
+- Security: backup restore mode whitelist validation
+- Security: path traversal protection in chat ingestion
+- Security: hardened dynamic SQL in schema module
+- CONTRIBUTING.md with development setup and PR guidelines
+- GitHub issue templates (bug report, feature request)
+- Pull request template
+- GitHub Actions release workflow (npm publish with provenance on tag push)
+- Enhanced CI workflow with npm pack verification and concurrency controls
+- CODE_OF_CONDUCT.md (Contributor Covenant v2.1)
+
+### Changed
+- Pinned `sqlite-vec` to exact `0.1.7-alpha.2` (removed semver range)
+- Standardized all log prefixes to `[Just-Memory]` (removed version numbers from logs)
+- ToolDispatch interface fully typed (57 methods with proper return types)
+- Type safety improvements across 15+ source files
+
+### Fixed
+- Unused import build errors in `stats.ts` and `session.ts`
+- Buffer null check in `consolidation.ts` cosine similarity
+
+---
+
 ## [4.3.4] - 2026-02-08
 
 ### Fixed

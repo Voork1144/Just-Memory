@@ -1,11 +1,12 @@
 /**
- * Just-Memory v4.3 — Scheduled Tasks
+ * Just-Memory v5.0 — Scheduled Tasks
  * Task scheduling with cron expressions and natural language time parsing.
  * Extracted from monolith — pure functions with db parameter injection.
  */
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { safeParse } from './config.js';
+import { validateTaskTitle } from './validation.js';
 
 // ============================================================================
 // Natural Language Time Patterns
@@ -228,6 +229,7 @@ export function createScheduledTask(
   actionData?: any,
   memoryId?: string,
 ) {
+  validateTaskTitle(title);
   const id = `task_${randomUUID().slice(0, 8)}`;
 
   // Determine if it's a cron expression or natural language
