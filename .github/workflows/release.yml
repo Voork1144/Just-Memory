@@ -22,7 +22,7 @@ jobs:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
 
-      - run: npm install --ignore-scripts
+      - run: npm install
       - run: npm run build
 
       - name: Publish to npm
