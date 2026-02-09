@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 4.3.x   | Yes                |
+| 5.x     | Yes                |
+| 4.3.x   | Deprecated         |
 | < 4.3   | No                 |
 
 ## Reporting a Vulnerability

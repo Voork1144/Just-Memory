@@ -9,7 +9,7 @@
 
 ## What It Does
 
-Claude forgets everything between sessions. Just-Memory provides 22 tools that give Claude persistent memory:
+Claude forgets everything between sessions. Just-Memory provides 23 tools that give Claude persistent memory:
 
 - **Semantic search** — e5-large-v2 embeddings (1024-dim) with HNSW indexing via sqlite-vec
 - **Knowledge graph** — Named entities with observations, typed relations, and temporal edges
@@ -63,7 +63,7 @@ Add to your Claude Desktop config file:
 
 Replace `/path/to/Just-Memory` with the actual path where you cloned the repository. Restart Claude Desktop after configuration.
 
-## Tools (22)
+## Tools (23)
 
 ### Core Memory (7 tools)
 
@@ -156,7 +156,7 @@ Storage: SQLite with WAL mode at `~/.just-memory/memories.db`. Backups in `~/.ju
 # Build
 npm run build
 
-# Test (436 tests)
+# Test (461 tests)
 npm test
 
 # Dev mode (hot reload)

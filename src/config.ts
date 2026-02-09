@@ -24,6 +24,8 @@ export const DB_PATH = join(DB_DIR, 'memories.db');
 
 // ============================================================================
 // Embedding Config
+// Note: Xenova/ prefix retained for backward compatibility with cached models.
+// @huggingface/transformers v3.8+ resolves Xenova/* names transparently.
 // ============================================================================
 export const EMBEDDING_MODEL_LARGE = 'Xenova/e5-large-v2';
 export const EMBEDDING_DIM_LARGE = 1024;

@@ -421,9 +421,9 @@ export async function findContradictionsEnhanced(
             suggestedAction: nliResult.confidence > 0.8 ? 'resolve' : 'review',
           });
         }
-      } catch (nliError: any) {
+      } catch (nliError: unknown) {
         // NLI failure is non-fatal - log and continue without NLI result
-        console.error(`[Just-Memory] NLI check failed for memory ${memory.id}: ${nliError.message}`);
+        console.error(`[Just-Memory] NLI check failed for memory ${memory.id}: ${nliError instanceof Error ? nliError.message : nliError}`);
       }
     }
   }

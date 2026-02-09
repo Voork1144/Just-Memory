@@ -92,7 +92,8 @@ export class WriteLock {
   drain(reason = 'Write lock shutting down'): void {
     const err = new Error(reason);
     while (this._queue.length > 0) {
-      const entry = this._queue.shift()!;
+      const entry = this._queue.shift();
+      if (!entry) break;
       entry.reject(err);
     }
     this._activeCount = 0;

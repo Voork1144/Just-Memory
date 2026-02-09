@@ -92,7 +92,7 @@ export function restoreMemories(
   let backup;
   try {
     backup = JSON.parse(readFileSync(realPath, 'utf-8'));
-  } catch (_parseError: any) {
+  } catch {
     return { error: 'Invalid backup file format', path: backupPath };
   }
 
@@ -151,14 +151,14 @@ export function restoreMemories(
       SELECT COUNT(*) as count FROM memories
       WHERE deleted_at IS NULL AND embedding IS NULL
       AND (project_id = ? OR project_id = 'global')
-    `).get(project) as any)?.count || 0;
+    `).get(project) as { count: number } | undefined)?.count || 0;
     return {
       restored,
       project_id: project,
       mode,
       ...(needsEmbedding > 0 ? { note: `${needsEmbedding} memories need re-embedding. Run memory_rebuild_embeddings to restore semantic search.` } : {}),
     };
-  } catch (_err: any) {
+  } catch {
     return { error: 'Restore failed — no changes made' };
   }
 }

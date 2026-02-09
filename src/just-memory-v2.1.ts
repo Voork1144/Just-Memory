@@ -297,8 +297,8 @@ async function initVectorStore(): Promise<void> {
         console.error(`[Just-Memory] VectorStore: Qdrant (${EMBEDDING_DIM}-dim, port ${QDRANT_PORT})`);
         return;
       }
-    } catch (err: any) {
-      console.error(`[Just-Memory] Qdrant init failed: ${err.message}, falling back to sqlite-vec`);
+    } catch (err: unknown) {
+      console.error(`[Just-Memory] Qdrant init failed: ${err instanceof Error ? err.message : err}, falling back to sqlite-vec`);
     }
   }
 
@@ -345,11 +345,11 @@ async function runEmbeddingWorker(): Promise<number> {
           return (db.prepare('SELECT project_id FROM memories WHERE id = ?').get(mem.id) as { project_id: string } | undefined)?.project_id || GLOBAL_PROJECT;
         });
         // Also upsert to VectorStore (Qdrant)
-        await vectorStore!.upsert(mem.id, embedding, { projectId });
+        if (vectorStore) await vectorStore.upsert(mem.id, embedding, { projectId });
         embedded++;
       }
-    } catch (err: any) {
-      console.error(`[Just-Memory] Embedding worker failed for ${mem.id}: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Just-Memory] Embedding worker failed for ${mem.id}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -387,7 +387,7 @@ _initVectorlite(db).then(state => {
 createCoreTables(db);
 seedEntityTypes(db);
 runLegacyCleanup(db);
-let fts5Ready = initFTS5(db);
+const fts5Ready = initFTS5(db);
 
 // Initialize chat ingestion schema (hierarchical conversation storage)
 initChatSchema(db);
@@ -803,8 +803,8 @@ async function runConsolidation(projectId?: string): Promise<Record<string, unkn
       autoBackup = backupMemories(project);
       console.error(`[Just-Memory] Auto-backup created: ${autoBackup.filename}`);
     }
-  } catch (err: any) {
-    console.error(`[Just-Memory] Auto-backup failed: ${err.message}`);
+  } catch (err: unknown) {
+    console.error(`[Just-Memory] Auto-backup failed: ${err instanceof Error ? err.message : err}`);
   }
 
   return { ...consolidateResult, reembedded, autoBackup };
@@ -824,10 +824,10 @@ function startConsolidationTimer() {
     if (isIdle() && !activeConsolidation) {
       activeConsolidation = Promise.race([
         runConsolidation(),
-        new Promise(resolve => setTimeout(resolve, CONSOLIDATION_HARD_TIMEOUT_MS)) // 5-minute hard timeout
+        new Promise(_resolve => setTimeout(_resolve, CONSOLIDATION_HARD_TIMEOUT_MS)) // 5-minute hard timeout
       ])
-        .catch((err: any) => {
-          console.error('[Just-Memory] Background consolidation error:', err.message);
+        .catch((err: unknown) => {
+          console.error('[Just-Memory] Background consolidation error:', err instanceof Error ? err.message : err);
         })
         .finally(() => {
           activeConsolidation = null;
@@ -1180,16 +1180,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Log failed tool call — wrapped in its own try to prevent logging failure from crashing
     try {
       if (shouldLog) {
         const durationMs = Date.now() - startTime;
         const projectId = args?.project_id || currentProjectId;
-        logToolCall(name, args, null, false, error.message || String(error), durationMs, projectId);
+        logToolCall(name, args, null, false, error instanceof Error ? error.message : String(error), durationMs, projectId);
       }
-    } catch (logErr: any) {
-      console.error(`[Just-Memory] Tool log also failed: ${logErr.message}`);
+    } catch (logErr: unknown) {
+      console.error(`[Just-Memory] Tool log also failed: ${logErr instanceof Error ? logErr.message : logErr}`);
     }
 
     return {
@@ -1264,8 +1264,8 @@ async function main() {
         const backupResult = backupMemories();
         console.error(`[Just-Memory] Auto-backup saved: ${backupResult.filename}`);
         cleanupOldBackups(BACKUP_DIR, 10);
-      } catch (err: any) {
-        console.error(`[Just-Memory] Auto-backup failed: ${err.message}`);
+      } catch (err: unknown) {
+        console.error(`[Just-Memory] Auto-backup failed: ${err instanceof Error ? err.message : err}`);
       }
     }
     // v4.0: Close VectorStore (stops Qdrant sidecar if running)
@@ -1273,16 +1273,16 @@ async function main() {
       try {
         await vectorStore.close();
         console.error('[Just-Memory] VectorStore closed');
-      } catch (err: any) {
-        console.error(`[Just-Memory] VectorStore close error: ${err.message}`);
+      } catch (err: unknown) {
+        console.error(`[Just-Memory] VectorStore close error: ${err instanceof Error ? err.message : err}`);
       }
     }
     try {
       db.pragma('wal_checkpoint(TRUNCATE)');
       db.close();
       console.error('[Just-Memory] Database closed cleanly');
-    } catch (err: any) {
-      console.error(`[Just-Memory] Error during shutdown: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Just-Memory] Error during shutdown: ${err instanceof Error ? err.message : err}`);
     }
     process.exit(0);
   };
@@ -1291,8 +1291,8 @@ async function main() {
 }
 
 // Global safety nets — prevent unhandled errors from silently crashing the MCP server
-process.on('unhandledRejection', (reason: any) => {
-  console.error('[Just-Memory] Unhandled promise rejection:', reason?.message || reason);
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[Just-Memory] Unhandled promise rejection:', reason instanceof Error ? reason.message : reason);
 });
 process.on('uncaughtException', (err: Error) => {
   console.error('[Just-Memory] Uncaught exception:', err.message);

@@ -28,6 +28,7 @@ export function runMigrations(db: Database.Database): void {
 
   // Migration 1: Drop unused tables (Phase 5 cleanup)
   if (!hasRun(1)) {
+    // SAFE: table names are hardcoded constants, not user input — no SQL injection risk
     const unusedTables = ['causal_relationships', 'alternative_outcomes', 'user_intents', 'intent_signals', 'memory_access_sequences', 'memory_coaccess'];
     for (const table of unusedTables) {
       try { db.exec(`DROP TABLE IF EXISTS ${table}`); } catch { /* ignore */ }

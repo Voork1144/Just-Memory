@@ -142,7 +142,7 @@ export function findSimilarMemories(
 
       // v3.13: Prefer embedding cosine similarity over word Jaccard
       if (hasEmbeddings && memories[i].embedding && memories[j].embedding) {
-        similarity = cosineSimilarityFromBlobs(memories[i].embedding!, memories[j].embedding!);
+        similarity = cosineSimilarityFromBlobs(memories[i].embedding as Buffer, memories[j].embedding as Buffer);
         method = 'cosine';
       } else {
         // Fallback: word-level Jaccard

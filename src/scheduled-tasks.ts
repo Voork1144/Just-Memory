@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { safeParse } from './config.js';
 import { validateTaskTitle } from './validation.js';
+import type { ScheduledTaskRow } from './types.js';
 
 // ============================================================================
 // Natural Language Time Patterns
@@ -226,7 +227,7 @@ export function createScheduledTask(
   recurring = false,
   projectId?: string,
   actionType = 'reminder',
-  actionData?: any,
+  actionData?: Record<string, unknown>,
   memoryId?: string,
 ) {
   validateTaskTitle(title);
@@ -270,7 +271,7 @@ export function createScheduledTask(
  */
 export function listScheduledTasks(db: Database.Database, status?: string, projectId?: string, limit = 50) {
   let sql = `SELECT * FROM scheduled_tasks WHERE (project_id = ? OR project_id = 'global')`;
-  const params: any[] = [projectId];
+  const params: (string | number | undefined)[] = [projectId];
 
   if (status) {
     sql += ` AND status = ?`;
@@ -280,7 +281,7 @@ export function listScheduledTasks(db: Database.Database, status?: string, proje
   sql += ` ORDER BY next_run ASC LIMIT ?`;
   params.push(limit);
 
-  const tasks = db.prepare(sql).all(...params) as any[];
+  const tasks = db.prepare(sql).all(...params) as ScheduledTaskRow[];
 
   return {
     count: tasks.length,
@@ -311,9 +312,17 @@ export function checkDueTasks(db: Database.Database, projectId?: string) {
     WHERE (project_id = ? OR project_id = 'global')
       AND status = 'pending'
       AND next_run <= ?
-  `).all(projectId, now) as any[];
+  `).all(projectId, now) as ScheduledTaskRow[];
 
-  const triggered: any[] = [];
+  const triggered: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    actionType: string;
+    actionData: Record<string, unknown>;
+    memoryId: string | null;
+    wasRecurring: boolean;
+  }> = [];
 
   for (const task of dueTasks) {
     // Update status
@@ -339,7 +348,7 @@ export function checkDueTasks(db: Database.Database, projectId?: string) {
       title: task.title,
       description: task.description,
       actionType: task.action_type,
-      actionData: safeParse(task.action_data, {}),
+      actionData: safeParse<Record<string, unknown>>(task.action_data, {}),
       memoryId: task.memory_id,
       wasRecurring: task.recurring === 1
     });
@@ -356,7 +365,7 @@ export function checkDueTasks(db: Database.Database, projectId?: string) {
  * Complete a triggered task
  */
 export function completeScheduledTask(db: Database.Database, taskId: string) {
-  const task = db.prepare(`SELECT * FROM scheduled_tasks WHERE id = ?`).get(taskId) as any;
+  const task = db.prepare(`SELECT * FROM scheduled_tasks WHERE id = ?`).get(taskId) as ScheduledTaskRow | undefined;
   if (!task) return { error: 'Task not found', taskId };
 
   if (task.status !== 'triggered') {
@@ -381,7 +390,7 @@ export function completeScheduledTask(db: Database.Database, taskId: string) {
  * Cancel a scheduled task
  */
 export function cancelScheduledTask(db: Database.Database, taskId: string) {
-  const task = db.prepare(`SELECT * FROM scheduled_tasks WHERE id = ?`).get(taskId) as any;
+  const task = db.prepare(`SELECT * FROM scheduled_tasks WHERE id = ?`).get(taskId) as ScheduledTaskRow | undefined;
   if (!task) return { error: 'Task not found', taskId };
 
   db.prepare(`

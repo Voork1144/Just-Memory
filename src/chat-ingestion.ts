@@ -321,7 +321,7 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
   let projectPath = '';
   let startTime = '';
   let endTime = '';
-  let sequenceNum = 0;
+  let _sequenceNum = 0;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -378,7 +378,7 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
       if (!textContent.trim() && contentBlocks.length === 0) continue;
 
       const messageId = entry.uuid;
-      sequenceNum++;
+      _sequenceNum++;
 
       // Create message record
       messages.push({
@@ -398,7 +398,7 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
       });
 
       // Extract tool uses from content blocks
-      let toolSequence = 0;
+      let _toolSequence = 0;
       for (const block of contentBlocks) {
         if (block.type === 'tool_use' && block.name) {
           toolUses.push({
@@ -410,7 +410,7 @@ export function parseClaudeCodeJsonl(filePath: string): ParsedConversation | nul
             isError: false,
             timestamp: entry.timestamp || new Date().toISOString(),
           });
-          toolSequence++;
+          _toolSequence++;
         } else if (block.type === 'tool_result' && block.tool_use_id) {
           // Find matching tool use and add output
           const matchingTool = toolUses.find(t => t.id === block.tool_use_id);
@@ -707,7 +707,7 @@ export function getConversationStats(db: Database.Database, projectId?: string):
       MAX(ended_at) as latest
     FROM conversations
     WHERE project_id = ? OR project_id = 'global'
-  `).get(project) as any;
+  `).get(project) as { total: number; messages: number; tools: number; input_tokens: number; output_tokens: number; earliest: string; latest: string };
 
   const bySource = db.prepare(`
     SELECT source, COUNT(*) as count
@@ -776,7 +776,7 @@ export function searchConversations(
       AND ${likeClauses}
     ORDER BY timestamp DESC
     LIMIT ?
-  `).all(project, ...likeParams, limit) as any[];
+  `).all(project, ...likeParams, limit) as Array<{ conversationId: string; messageId: string; role: string; content: string; timestamp: string; matchScore: number }>;
 
   return results;
 }
@@ -785,13 +785,13 @@ export function getConversation(
   db: Database.Database,
   conversationId: string
 ): {
-  conversation: any;
-  messages: any[];
-  toolUses: any[];
+  conversation: Record<string, unknown>;
+  messages: Record<string, unknown>[];
+  toolUses: Record<string, unknown>[];
 } | null {
   const conversation = db.prepare(`
     SELECT * FROM conversations WHERE id = ?
-  `).get(conversationId);
+  `).get(conversationId) as Record<string, unknown> | undefined;
 
   if (!conversation) return null;
 
@@ -799,13 +799,13 @@ export function getConversation(
     SELECT * FROM conversation_messages
     WHERE conversation_id = ?
     ORDER BY sequence_num
-  `).all(conversationId);
+  `).all(conversationId) as Record<string, unknown>[];
 
   const toolUses = db.prepare(`
     SELECT * FROM conversation_tool_uses
     WHERE conversation_id = ?
     ORDER BY timestamp
-  `).all(conversationId);
+  `).all(conversationId) as Record<string, unknown>[];
 
   return { conversation, messages, toolUses };
 }
@@ -836,8 +836,8 @@ interface ClaudeDesktopExportMessage {
   sender: 'human' | 'assistant';
   created_at: string;
   updated_at: string;
-  attachments?: any[];
-  files?: any[];
+  attachments?: Array<Record<string, unknown>>;
+  files?: Array<Record<string, unknown>>;
 }
 
 export function parseClaudeDesktopExport(filePath: string): ParsedConversation[] {
@@ -1611,13 +1611,13 @@ export async function summarizeConversation(
   // Check conversation exists
   const conv = db.prepare(`
     SELECT id FROM conversations WHERE id = ? AND (project_id = ? OR project_id = 'global')
-  `).get(conversationId, projectId) as any;
+  `).get(conversationId, projectId) as { id: string } | undefined;
   if (!conv) return { error: 'Conversation not found' };
 
   // Check if already summarized
   const existing = db.prepare(`
     SELECT id, content FROM conversation_summaries WHERE conversation_id = ? AND summary_type = 'brief'
-  `).get(conversationId) as any;
+  `).get(conversationId) as { id: string; content: string } | undefined;
   if (existing) return { id: existing.id, summary: existing.content, summary_type: 'brief' };
 
   // Load messages
@@ -1630,7 +1630,7 @@ export async function summarizeConversation(
 
   // Build text for summarization
   // Keep most recent messages (they're most important), skip very long tool outputs
-  let textParts: string[] = [];
+  const textParts: string[] = [];
   for (const msg of messages) {
     const content = msg.content.length > 200 ? msg.content.slice(0, 200) + '...' : msg.content;
     textParts.push(`${msg.role}: ${content}`);
@@ -1755,7 +1755,7 @@ export function extractConversationTopics(
     // Get topic ID
     const topic = db.prepare(`
       SELECT id FROM conversation_topics WHERE project_id = ? AND name = ?
-    `).get(projectId, name) as any;
+    `).get(projectId, name) as { id: string } | undefined;
 
     if (topic) {
       const relevance = (wordFreq.get(name) || 0) / (sorted[0]?.[1] || 1);
@@ -1787,9 +1787,9 @@ export function searchConversationSummaries(
       AND content LIKE '%' || ? || '%'
     ORDER BY created_at DESC
     LIMIT ?
-  `).all(projectId, safeQuery, limit) as any[];
+  `).all(projectId, safeQuery, limit) as Array<{ id: string; conversation_id: string; summary: string; summary_type: string; model_used: string; created_at: string }>;
 
-  return results.map((r: any) => ({
+  return results.map((r) => ({
     id: r.id,
     conversation_id: r.conversation_id,
     summary: r.summary,

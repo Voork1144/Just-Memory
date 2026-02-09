@@ -129,8 +129,8 @@ export class QdrantStore implements VectorStore {
       this._ready = true;
       console.error(`[Just-Memory] Qdrant ready on port ${this.opts.port} (${this.opts.embeddingDim}-dim, scalar quantized)`);
       return true;
-    } catch (err: any) {
-      console.error('[Just-Memory] Qdrant startup failed:', err.message);
+    } catch (err: unknown) {
+      console.error('[Just-Memory] Qdrant startup failed:', err instanceof Error ? err.message : err);
       this._kill();
       return false;
     }
@@ -179,31 +179,33 @@ export class QdrantStore implements VectorStore {
   async search(query: Float32Array, limit: number, filter?: VectorFilter): Promise<VectorResult[]> {
     if (!this._client) return [];
 
-    const qdrantFilter: { must?: QdrantFilterCondition[]; must_not?: QdrantFilterCondition[] } = { must: [], must_not: [] };
+    const mustConditions: QdrantFilterCondition[] = [];
+    const mustNotConditions: QdrantFilterCondition[] = [];
 
     if (filter?.projectId) {
-      qdrantFilter.must!.push({
+      mustConditions.push({
         key: 'project_id',
         match: { any: [filter.projectId, 'global'] },
       });
     }
 
     if (filter?.excludeDeleted !== false) {
-      qdrantFilter.must_not!.push({
+      mustNotConditions.push({
         key: 'deleted',
         match: { value: true },
       });
     }
 
     if (filter?.excludeIds && filter.excludeIds.length > 0) {
-      qdrantFilter.must_not!.push({
+      mustNotConditions.push({
         has_id: filter.excludeIds,
       });
     }
 
-    // Clean empty filter arrays
-    if (qdrantFilter.must && qdrantFilter.must.length === 0) delete qdrantFilter.must;
-    if (qdrantFilter.must_not && qdrantFilter.must_not.length === 0) delete qdrantFilter.must_not;
+    // Only include non-empty filter arrays
+    const qdrantFilter: { must?: QdrantFilterCondition[]; must_not?: QdrantFilterCondition[] } = {};
+    if (mustConditions.length > 0) qdrantFilter.must = mustConditions;
+    if (mustNotConditions.length > 0) qdrantFilter.must_not = mustNotConditions;
 
     const hasFilter = qdrantFilter.must || qdrantFilter.must_not;
 

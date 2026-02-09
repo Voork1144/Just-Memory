@@ -428,7 +428,8 @@ export function listEntityTypes(db: Database.Database) {
     const queue = childrenMap.get(name) || [];
     const visited = new Set<string>();
     while (queue.length > 0) {
-      const child = queue.shift()!;
+      const child = queue.shift();
+      if (!child) break;
       if (visited.has(child)) continue;
       visited.add(child);
       count++;
@@ -458,7 +459,7 @@ export function searchEntitiesByTypeHierarchy(
   const allTypes = [entityType, ...getTypeDescendants(db, entityType)];
 
   let sql = `SELECT * FROM entities WHERE (project_id = ? OR project_id = 'global') AND entity_type IN (${allTypes.map(() => '?').join(', ')})`;
-  const params: any[] = [project, ...allTypes];
+  const params: (string | number)[] = [project, ...allTypes];
 
   if (query) {
     sql += ` AND (name LIKE ? OR observations LIKE ?)`;
