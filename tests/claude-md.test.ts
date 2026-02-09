@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { generateClaudeMd, ensureClaudeMd } from '../src/claude-md-template.js';
+import { generateClaudeMd, ensureClaudeMd, removeClaudeMd } from '../src/claude-md-template.js';
 
 // ── Template content ─────────────────────────────────────────────────
 
@@ -63,6 +63,12 @@ describe('generateClaudeMd', () => {
     assert.ok(md.includes('DO NOT rationalize skipping'));
     assert.ok(md.includes('Too simple'));
     assert.ok(md.includes('Failure mode to avoid'));
+  });
+
+  it('should contain both start and end markers', () => {
+    const md = generateClaudeMd();
+    assert.ok(md.includes('<!-- just-memory-auto-generated -->'));
+    assert.ok(md.includes('<!-- /just-memory-auto-generated -->'));
   });
 
   it('should contain memory types table', () => {
@@ -244,5 +250,107 @@ describe('ensureClaudeMd', () => {
     // File should still be at ~/.claude/CLAUDE.md, not project path
     const filePath = join(tmpHome, '.claude', 'CLAUDE.md');
     assert.ok(existsSync(filePath));
+  });
+});
+
+// ── removeClaudeMd ──────────────────────────────────────────────────
+
+describe('removeClaudeMd', () => {
+  let tmpHome: string;
+  let originalHome: string;
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'jm-claude-md-rm-test-'));
+    originalHome = process.env['HOME'] ?? '';
+    process.env['HOME'] = tmpHome;
+  });
+
+  afterEach(() => {
+    process.env['HOME'] = originalHome;
+    rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  it('should return skipped when no CLAUDE.md exists', () => {
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'skipped');
+  });
+
+  it('should return skipped when CLAUDE.md has no Just-Memory content', () => {
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, 'CLAUDE.md'), '# My custom rules\n\nNo memory stuff here.\n');
+
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'skipped');
+  });
+
+  it('should delete file when entirely auto-generated (with end marker)', () => {
+    // Create via ensureClaudeMd
+    ensureClaudeMd();
+    const filePath = join(tmpHome, '.claude', 'CLAUDE.md');
+    assert.ok(existsSync(filePath));
+
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'removed');
+    assert.ok(!existsSync(filePath));
+  });
+
+  it('should clean only Just-Memory block when appended to existing content', () => {
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
+    const userContent = '# My Custom Rules\n\n- Be concise\n- No emojis\n';
+    writeFileSync(filePath, userContent);
+
+    // Append Just-Memory content
+    ensureClaudeMd();
+    const beforeRemove = readFileSync(filePath, 'utf-8');
+    assert.ok(beforeRemove.includes('Just-Memory'));
+
+    // Remove
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'cleaned');
+
+    // User content preserved, Just-Memory gone
+    const afterRemove = readFileSync(filePath, 'utf-8');
+    assert.ok(afterRemove.includes('My Custom Rules'));
+    assert.ok(afterRemove.includes('Be concise'));
+    assert.ok(!afterRemove.includes('<!-- just-memory-auto-generated -->'));
+    assert.ok(!afterRemove.includes('memory_briefing'));
+  });
+
+  it('should handle old format without end marker', () => {
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
+    // Simulate old format: only start marker, no end marker
+    writeFileSync(filePath, '<!-- just-memory-auto-generated -->\n# Old Just-Memory content\nSome rules here\n');
+
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'removed');
+    assert.ok(!existsSync(filePath));
+  });
+
+  it('should handle old format with user content before marker', () => {
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
+    writeFileSync(filePath, '# User Rules\n\nBe helpful.\n\n<!-- just-memory-auto-generated -->\n# Old Just-Memory\n');
+
+    const result = removeClaudeMd();
+    assert.strictEqual(result, 'cleaned');
+
+    const content = readFileSync(filePath, 'utf-8');
+    assert.ok(content.includes('User Rules'));
+    assert.ok(!content.includes('just-memory-auto-generated'));
+  });
+
+  it('should be idempotent — second remove after remove is skipped', () => {
+    ensureClaudeMd();
+    const first = removeClaudeMd();
+    assert.strictEqual(first, 'removed');
+
+    const second = removeClaudeMd();
+    assert.strictEqual(second, 'skipped');
   });
 });

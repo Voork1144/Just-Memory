@@ -21,6 +21,7 @@
     "lint": "eslint src/",
     "clean": "rimraf dist",
     "postinstall": "node scripts/download-qdrant.mjs",
+    "preuninstall": "node scripts/uninstall.mjs",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -54,6 +55,7 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "scripts/download-qdrant.mjs",
+    "scripts/uninstall.mjs",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"

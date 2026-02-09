@@ -6,11 +6,12 @@
  * effectively from the first session.
  */
 
-import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const MARKER = '<!-- just-memory-auto-generated -->';
+const MARKER_END = '<!-- /just-memory-auto-generated -->';
 
 /**
  * Generate the CLAUDE.md content for Just-Memory.
@@ -154,6 +155,8 @@ memory_task action: "clear"
 | \`memory_tool_history\` | View recent tool calls |
 | \`memory_rebuild_embeddings\` | Backfill or rebuild vector embeddings |
 | \`memory_health\` | Server health check |
+
+${MARKER_END}
 `;
 }
 
@@ -206,6 +209,75 @@ export function ensureClaudeMd(_projectPath?: string | null): 'created' | 'appen
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[Just-Memory] Could not write ~/.claude/CLAUDE.md: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Remove Just-Memory content from ~/.claude/CLAUDE.md.
+ *
+ * - If the file was entirely auto-generated (only Just-Memory content): deletes the file
+ * - If Just-Memory was appended to existing content: removes only the auto-generated block
+ * - If no Just-Memory content found: no-op
+ *
+ * Used during uninstall to clean up user preferences.
+ * Never throws — logs warnings to stderr on failure.
+ * Returns: 'removed' | 'cleaned' | 'skipped' | null
+ */
+export function removeClaudeMd(): 'removed' | 'cleaned' | 'skipped' | null {
+  const claudeMdPath = join(homedir(), '.claude', 'CLAUDE.md');
+
+  try {
+    if (!existsSync(claudeMdPath)) {
+      return 'skipped';
+    }
+
+    const content = readFileSync(claudeMdPath, 'utf-8');
+
+    // No Just-Memory content
+    if (!content.includes(MARKER) && !content.includes('Just-Memory') && !content.includes('just-memory')) {
+      return 'skipped';
+    }
+
+    // If file has end marker, remove the block between markers
+    if (content.includes(MARKER) && content.includes(MARKER_END)) {
+      const before = content.substring(0, content.indexOf(MARKER));
+      const after = content.substring(content.indexOf(MARKER_END) + MARKER_END.length);
+      const remaining = (before + after).trim();
+
+      if (remaining.length === 0) {
+        // File was entirely auto-generated
+        unlinkSync(claudeMdPath);
+        console.error('[Just-Memory] Removed ~/.claude/CLAUDE.md (was entirely auto-generated)');
+        return 'removed';
+      }
+
+      // Other content exists — keep it, remove Just-Memory block
+      writeFileSync(claudeMdPath, remaining + '\n');
+      console.error('[Just-Memory] Cleaned Just-Memory content from ~/.claude/CLAUDE.md');
+      return 'cleaned';
+    }
+
+    // Has start marker but no end marker (older version) — remove from marker to end
+    if (content.includes(MARKER)) {
+      const before = content.substring(0, content.indexOf(MARKER)).trim();
+
+      if (before.length === 0) {
+        unlinkSync(claudeMdPath);
+        console.error('[Just-Memory] Removed ~/.claude/CLAUDE.md (was entirely auto-generated)');
+        return 'removed';
+      }
+
+      writeFileSync(claudeMdPath, before + '\n');
+      console.error('[Just-Memory] Cleaned Just-Memory content from ~/.claude/CLAUDE.md');
+      return 'cleaned';
+    }
+
+    // Contains "Just-Memory" text but no marker — user-written, don't touch
+    return 'skipped';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Just-Memory] Could not clean ~/.claude/CLAUDE.md: ${msg}`);
     return null;
   }
 }
