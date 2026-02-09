@@ -8,6 +8,7 @@
  * or any other monolith state.
  */
 
+import { generateClaudeMd, ensureClaudeMd } from './claude-md-template.js';
 import type {
   MemorySummary,
   ToolHistoryEntry,
@@ -169,6 +170,7 @@ export interface ToolDispatch {
 
   // Project-aware helpers
   getEffectiveProject(projectId?: string): string;
+  getProjectPath(): string | null;
 }
 
 // ============================================================================
@@ -379,6 +381,17 @@ export async function dispatchToolCall(
     // ---- Chat Ingestion (unified) ----
     case 'memory_chat':
       return dispatchChat(args, d);
+
+    case 'memory_generate_claude_md': {
+      if (args.action === 'preview') {
+        return { content: generateClaudeMd() };
+      }
+      const result = ensureClaudeMd(d.getProjectPath());
+      if (result === null) {
+        return { error: 'No project path detected. Cannot generate CLAUDE.md.' };
+      }
+      return { success: true, action: result, path: d.getProjectPath() ? `${d.getProjectPath()}/CLAUDE.md` : null };
+    }
 
     default:
       throw new Error(`Unknown tool: ${name}`);

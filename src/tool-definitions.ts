@@ -355,5 +355,18 @@ export const TOOLS = [
       },
       required: ['action']
     }
+  },
+
+  // CLAUDE.md Management
+  {
+    name: 'memory_generate_claude_md',
+    description: 'Generate or preview the CLAUDE.md file with Just-Memory instructions for the current project. Actions: generate (create/update CLAUDE.md at project root), preview (return template content without writing)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['generate', 'preview'], description: 'Operation: generate writes the file, preview returns content only' }
+      },
+      required: ['action']
+    }
   }
 ];

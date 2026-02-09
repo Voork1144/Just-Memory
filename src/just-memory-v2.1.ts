@@ -50,6 +50,7 @@ import {
   type ContradictionResult,
 } from './config.js';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { ensureClaudeMd } from './claude-md-template.js';
 import { platform } from 'os';
 import { join, dirname, basename, resolve, sep } from 'path';
 import * as sqliteVec from 'sqlite-vec';
@@ -236,6 +237,9 @@ function initProject() {
   currentProjectId = detected.id;
   currentProjectPath = detected.path;
   console.error(`[Just-Memory] Project: ${detected.id} (${detected.source})`);
+
+  // Auto-generate CLAUDE.md with memory instructions for new projects
+  ensureClaudeMd(currentProjectPath);
 }
 
 initProject();
@@ -1155,6 +1159,7 @@ const toolDispatch: ToolDispatch = {
   extractTopics: (conversationId, projectId) => extractConversationTopics(db, conversationId, getEffectiveProject(projectId)),
   // Helper
   getEffectiveProject,
+  getProjectPath: () => currentProjectPath,
 };
 
 // Handle tool calls (dispatch logic in tool-handlers.ts)
