@@ -1009,6 +1009,10 @@ function buildBriefingResult(projectId?: string, maxTokens?: number) {
     briefing_seq: briefingSeq,
     pending_tasks: pendingTasks.length > 0 ? pendingTasks : null,
     current_session_id: CURRENT_SESSION_ID,
+    rules: {
+      memory_storage: 'MANDATORY: Call memory_store for EVERY task. Store the user\'s task goal at start, store the outcome at completion, store every error+fix immediately. Minimum 1 memory_store call per task. "Too simple" is NEVER a valid reason to skip. Users will not remind you — this must be autonomous.',
+      what_to_store: 'Task goals, outcomes, error+fix pairs, workarounds, decisions, user preferences, research findings, assets created.',
+    },
   };
 }
 
