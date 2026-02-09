@@ -8,6 +8,8 @@
  * or any other monolith state.
  */
 
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { generateClaudeMd, ensureClaudeMd } from './claude-md-template.js';
 import type {
   MemorySummary,
@@ -386,11 +388,11 @@ export async function dispatchToolCall(
       if (args.action === 'preview') {
         return { content: generateClaudeMd() };
       }
-      const result = ensureClaudeMd(d.getProjectPath());
+      const result = ensureClaudeMd();
       if (result === null) {
-        return { error: 'No project path detected. Cannot generate CLAUDE.md.' };
+        return { error: 'Could not write ~/.claude/CLAUDE.md.' };
       }
-      return { success: true, action: result, path: d.getProjectPath() ? `${d.getProjectPath()}/CLAUDE.md` : null };
+      return { success: true, action: result, path: join(homedir(), '.claude', 'CLAUDE.md') };
     }
 
     default:

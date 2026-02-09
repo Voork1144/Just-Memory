@@ -1,10 +1,13 @@
 /**
  * Tests for src/claude-md-template.ts
  * CLAUDE.md auto-generation: template content & ensureClaudeMd behavior.
+ *
+ * ensureClaudeMd writes to ~/.claude/CLAUDE.md (user preferences).
+ * Tests override HOME env to redirect to a temp directory.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateClaudeMd, ensureClaudeMd } from '../src/claude-md-template.js';
@@ -54,6 +57,14 @@ describe('generateClaudeMd', () => {
     assert.ok(md.includes('Assets knowledge'));
   });
 
+  it('should contain the hard enforcement rule', () => {
+    const md = generateClaudeMd();
+    assert.ok(md.includes('HARD RULE: Memory Storage Enforcement'));
+    assert.ok(md.includes('DO NOT rationalize skipping'));
+    assert.ok(md.includes('Too simple'));
+    assert.ok(md.includes('Failure mode to avoid'));
+  });
+
   it('should contain memory types table', () => {
     const md = generateClaudeMd();
     assert.ok(md.includes('fact'));
@@ -98,28 +109,29 @@ describe('generateClaudeMd', () => {
 });
 
 // ── ensureClaudeMd ───────────────────────────────────────────────────
+// ensureClaudeMd writes to ~/.claude/CLAUDE.md. We override HOME to
+// redirect to a temp directory so tests don't touch the real user config.
 
 describe('ensureClaudeMd', () => {
-  let tmpDir: string;
+  let tmpHome: string;
+  let originalHome: string;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'jm-claude-md-test-'));
+    tmpHome = mkdtempSync(join(tmpdir(), 'jm-claude-md-test-'));
+    originalHome = process.env['HOME'] ?? '';
+    process.env['HOME'] = tmpHome;
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    process.env['HOME'] = originalHome;
+    rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  it('should return null when projectPath is null', () => {
-    const result = ensureClaudeMd(null);
-    assert.strictEqual(result, null);
-  });
-
-  it('should create CLAUDE.md when missing', () => {
-    const result = ensureClaudeMd(tmpDir);
+  it('should create ~/.claude/CLAUDE.md when missing', () => {
+    const result = ensureClaudeMd();
     assert.strictEqual(result, 'created');
 
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const filePath = join(tmpHome, '.claude', 'CLAUDE.md');
     assert.ok(existsSync(filePath));
 
     const content = readFileSync(filePath, 'utf-8');
@@ -127,11 +139,23 @@ describe('ensureClaudeMd', () => {
     assert.ok(content.includes('<!-- just-memory-auto-generated -->'));
   });
 
+  it('should create .claude directory if it does not exist', () => {
+    const claudeDir = join(tmpHome, '.claude');
+    assert.ok(!existsSync(claudeDir));
+
+    ensureClaudeMd();
+
+    assert.ok(existsSync(claudeDir));
+    assert.ok(existsSync(join(claudeDir, 'CLAUDE.md')));
+  });
+
   it('should skip when CLAUDE.md already contains Just-Memory', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
     writeFileSync(filePath, '# My Project\n\nUses Just-Memory for persistence.\n');
 
-    const result = ensureClaudeMd(tmpDir);
+    const result = ensureClaudeMd();
     assert.strictEqual(result, 'skipped');
 
     // Content should be unchanged
@@ -140,27 +164,33 @@ describe('ensureClaudeMd', () => {
   });
 
   it('should skip when CLAUDE.md contains just-memory (lowercase)', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
     writeFileSync(filePath, '# Setup\n\nInstall just-memory MCP server.\n');
 
-    const result = ensureClaudeMd(tmpDir);
+    const result = ensureClaudeMd();
     assert.strictEqual(result, 'skipped');
   });
 
   it('should skip when CLAUDE.md contains the auto-generated marker', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
     writeFileSync(filePath, '<!-- just-memory-auto-generated -->\nold content');
 
-    const result = ensureClaudeMd(tmpDir);
+    const result = ensureClaudeMd();
     assert.strictEqual(result, 'skipped');
   });
 
   it('should append when CLAUDE.md exists without Just-Memory content', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
     const originalContent = '# My Project\n\nThis is my existing CLAUDE.md.\n';
     writeFileSync(filePath, originalContent);
 
-    const result = ensureClaudeMd(tmpDir);
+    const result = ensureClaudeMd();
     assert.strictEqual(result, 'appended');
 
     const content = readFileSync(filePath, 'utf-8');
@@ -168,15 +198,17 @@ describe('ensureClaudeMd', () => {
     assert.ok(content.startsWith(originalContent));
     // New content appended
     assert.ok(content.includes('<!-- just-memory-auto-generated -->'));
-    assert.ok(content.includes('Just-Memory'));
+    assert.ok(content.includes('HARD RULE'));
   });
 
   it('should not overwrite existing content when appending', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    const filePath = join(claudeDir, 'CLAUDE.md');
     const originalContent = '# Custom Rules\n\n- Rule 1: No emojis\n- Rule 2: Be concise\n';
     writeFileSync(filePath, originalContent);
 
-    ensureClaudeMd(tmpDir);
+    ensureClaudeMd();
 
     const content = readFileSync(filePath, 'utf-8');
     assert.ok(content.includes('Rule 1: No emojis'));
@@ -185,21 +217,32 @@ describe('ensureClaudeMd', () => {
   });
 
   it('should be idempotent — second call after create is a skip', () => {
-    const first = ensureClaudeMd(tmpDir);
+    const first = ensureClaudeMd();
     assert.strictEqual(first, 'created');
 
-    const second = ensureClaudeMd(tmpDir);
+    const second = ensureClaudeMd();
     assert.strictEqual(second, 'skipped');
   });
 
   it('should be idempotent — second call after append is a skip', () => {
-    const filePath = join(tmpDir, 'CLAUDE.md');
-    writeFileSync(filePath, '# Existing\n');
+    const claudeDir = join(tmpHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, 'CLAUDE.md'), '# Existing\n');
 
-    const first = ensureClaudeMd(tmpDir);
+    const first = ensureClaudeMd();
     assert.strictEqual(first, 'appended');
 
-    const second = ensureClaudeMd(tmpDir);
+    const second = ensureClaudeMd();
     assert.strictEqual(second, 'skipped');
+  });
+
+  it('should accept legacy projectPath parameter without error', () => {
+    // Backwards compatibility — parameter is accepted but ignored
+    const result = ensureClaudeMd('/some/project/path');
+    assert.strictEqual(result, 'created');
+
+    // File should still be at ~/.claude/CLAUDE.md, not project path
+    const filePath = join(tmpHome, '.claude', 'CLAUDE.md');
+    assert.ok(existsSync(filePath));
   });
 });

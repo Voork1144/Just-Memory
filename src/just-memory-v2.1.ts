@@ -238,8 +238,8 @@ function initProject() {
   currentProjectPath = detected.path;
   console.error(`[Just-Memory] Project: ${detected.id} (${detected.source})`);
 
-  // Auto-generate CLAUDE.md with memory instructions for new projects
-  ensureClaudeMd(currentProjectPath);
+  // Auto-generate ~/.claude/CLAUDE.md with memory instructions (user preferences)
+  ensureClaudeMd();
 }
 
 initProject();

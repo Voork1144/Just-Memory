@@ -6,8 +6,9 @@
  * effectively from the first session.
  */
 
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 const MARKER = '<!-- just-memory-auto-generated -->';
 
@@ -68,6 +69,22 @@ memory_task action: "clear"
 - Assets knowledge (images, docs, videos)
 
 **Minimum:** 1 memory per task. If a task involved debugging, expect 2-5 memories.
+
+## HARD RULE: Memory Storage Enforcement
+
+**DO NOT rationalize skipping \`memory_store\`. There is NO task too trivial.**
+
+Before you send your final response for ANY completed task, verify:
+- Did I call \`memory_store\` with the user's task request/goal?
+- Did I call \`memory_store\` with the outcome/result?
+- Did I store every error + fix encountered?
+- Did I store every user preference expressed?
+
+If ANY answer is no, call \`memory_store\` NOW before responding.
+
+**"Too simple" is NOT a valid reason to skip.** A user asking "make a webpage" is a task goal — store it. The file you created is an asset — store it. This is non-negotiable.
+
+**Failure mode to avoid:** Seeing a simple task, deciding it's "not worth storing," and silently skipping \`memory_store\`. This defeats the entire purpose of Just-Memory. Users will not remind you. You must do this autonomously, every time, without prompting.
 
 ## Task Tracking (Crash Recovery)
 
@@ -141,22 +158,31 @@ memory_task action: "clear"
 }
 
 /**
- * Ensure a CLAUDE.md exists at the project root with Just-Memory instructions.
+ * Ensure ~/.claude/CLAUDE.md contains Just-Memory instructions.
  *
- * - If no CLAUDE.md exists: creates one with the full template
- * - If CLAUDE.md exists but doesn't mention Just-Memory: appends the template
- * - If CLAUDE.md already has Just-Memory content: skips (no-op)
- * - If projectPath is null: skips (no project directory detected)
+ * Writes to user-level preferences (~/.claude/CLAUDE.md) so rules apply
+ * globally across all projects — no per-project CLAUDE.md needed.
+ *
+ * - If ~/.claude/CLAUDE.md doesn't exist: creates it with the full template
+ * - If it exists but doesn't mention Just-Memory: appends the template
+ * - If it already has Just-Memory content: skips (no-op)
+ *
+ * The projectPath parameter is accepted for backwards compatibility but
+ * is no longer used — rules always go to user preferences.
  *
  * Never throws — logs warnings to stderr on failure.
  * Returns: 'created' | 'appended' | 'skipped' | null
  */
-export function ensureClaudeMd(projectPath: string | null): 'created' | 'appended' | 'skipped' | null {
-  if (!projectPath) return null;
-
-  const claudeMdPath = join(projectPath, 'CLAUDE.md');
+export function ensureClaudeMd(_projectPath?: string | null): 'created' | 'appended' | 'skipped' | null {
+  const claudeDir = join(homedir(), '.claude');
+  const claudeMdPath = join(claudeDir, 'CLAUDE.md');
 
   try {
+    // Ensure ~/.claude/ directory exists
+    if (!existsSync(claudeDir)) {
+      mkdirSync(claudeDir, { recursive: true });
+    }
+
     if (existsSync(claudeMdPath)) {
       const existing = readFileSync(claudeMdPath, 'utf-8');
 
@@ -179,7 +205,7 @@ export function ensureClaudeMd(projectPath: string | null): 'created' | 'appende
     return 'created';
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Just-Memory] Could not generate CLAUDE.md: ${msg}`);
+    console.error(`[Just-Memory] Could not write ~/.claude/CLAUDE.md: ${msg}`);
     return null;
   }
 }
