@@ -28,7 +28,7 @@ import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from 'f
 import { join, basename, dirname, resolve, sep } from 'path';
 import { homedir } from 'os';
 import { sanitizeLikePattern } from './validation.js';
-import { generateEmbedding, generateSummary } from './models.js';
+import { generateDocumentEmbedding, generateSummary } from './models.js';
 import { SUMMARIZATION_MODEL } from './config.js';
 
 // ============================================================================
@@ -1647,7 +1647,7 @@ export async function summarizeConversation(
   if (!summary) return { error: 'Summarization failed - model may not be loaded' };
 
   // Generate embedding for the summary
-  const embedding = await generateEmbedding(summary);
+  const embedding = await generateDocumentEmbedding(summary);
   const embeddingBuffer = embedding ? Buffer.from(new Uint8Array(embedding.buffer)) : null;
 
   const summaryId = randomUUID().replace(/-/g, '');

@@ -59,6 +59,10 @@ export async function initNLI(): Promise<void> {
   }
 }
 
+/**
+ * Generate embedding for a SEARCH QUERY (uses "query: " prefix).
+ * Use this when embedding user search terms for retrieval.
+ */
 export async function generateEmbedding(text: string): Promise<Float32Array | null> {
   if (!embedderReady || !embedder) return null;
   try {
@@ -70,6 +74,27 @@ export async function generateEmbedding(text: string): Promise<Float32Array | nu
     return new Float32Array(result.data);
   } catch (err) {
     console.error('[Just-Memory] Embedding generation failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Generate embedding for a DOCUMENT/PASSAGE (uses "passage: " prefix).
+ * Use this when embedding memory content for storage.
+ * E5 models are asymmetric: queries and passages occupy different embedding subspaces.
+ * Using the correct prefix improves retrieval accuracy significantly.
+ */
+export async function generateDocumentEmbedding(text: string): Promise<Float32Array | null> {
+  if (!embedderReady || !embedder) return null;
+  try {
+    const prefixedText = `passage: ${text}`;
+    const result = await Promise.race([
+      embedder(prefixedText, { pooling: 'mean', normalize: true }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Embedding timeout after ${EMBEDDING_TIMEOUT_MS}ms`)), EMBEDDING_TIMEOUT_MS))
+    ]);
+    return new Float32Array(result.data);
+  } catch (err) {
+    console.error('[Just-Memory] Document embedding generation failed:', err);
     return null;
   }
 }

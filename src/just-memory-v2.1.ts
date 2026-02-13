@@ -60,7 +60,7 @@ import { WriteLock } from './write-lock.js';
 import { SqliteVecStore } from './vector-store.js';
 import type { VectorStore } from './vector-store.js';
 import { QdrantStore } from './qdrant-store.js';
-import { generateEmbedding } from './models.js';
+import { generateDocumentEmbedding } from './models.js';
 import { TOOLS } from './tool-definitions.js';
 import {
   createScheduledTask as _createScheduledTask,
@@ -340,7 +340,7 @@ async function runEmbeddingWorker(): Promise<number> {
   let embedded = 0;
   for (const mem of orphans) {
     try {
-      const embedding = await generateEmbedding(mem.content);
+      const embedding = await generateDocumentEmbedding(mem.content);
       if (embedding) {
         // Store in SQLite + fetch project_id atomically under write lock
         const buffer = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
@@ -570,7 +570,7 @@ function storeMemory(content: string, type = 'note', tags: string[] = [], import
   return _storeMemory(db, findContradictionsEnhanced, content, type, tags, importance, confidence, getEffectiveProject(projectId));
 }
 function reembedOrphaned(projectId?: string, limit = 50, forceRebuild = false) {
-  return _reembedOrphaned(db, getEffectiveProject(projectId), limit, forceRebuild);
+  return _reembedOrphaned(db, getEffectiveProject(projectId), limit, forceRebuild, vectorStore || undefined);
 }
 function recallMemory(id: string, projectId?: string) { return _recallMemory(db, id, getEffectiveProject(projectId)); }
 function updateMemory(id: string, updates: MemoryUpdates, projectId?: string) { return _updateMemory(db, findContradictionsEnhanced, id, updates, getEffectiveProject(projectId)); }

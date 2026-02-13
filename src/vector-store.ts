@@ -142,7 +142,7 @@ export class SqliteVecStore implements VectorStore {
         params.push(limit);
 
         const rows = this.db.prepare(sql).all(...params) as VecScoreRow[];
-        return rows.filter(r => r.score > 0.3).map(r => ({ id: r.id, score: r.score }));
+        return rows.filter(r => r.score > 0.1).map(r => ({ id: r.id, score: r.score }));
       }
     }
 
@@ -169,7 +169,7 @@ export class SqliteVecStore implements VectorStore {
     params.push(limit);
 
     const rows = this.db.prepare(sql).all(...params) as VecScoreRow[];
-    return rows.filter(r => r.score > 0.3).map(r => ({ id: r.id, score: r.score }));
+    return rows.filter(r => r.score > 0.1).map(r => ({ id: r.id, score: r.score }));
   }
 
   async delete(id: string): Promise<void> {
