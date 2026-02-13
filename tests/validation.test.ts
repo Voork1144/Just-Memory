@@ -120,15 +120,19 @@ describe('sanitizeProjectId', () => {
   });
 
   it('should reject reserved project IDs', () => {
-    assert.throws(() => sanitizeProjectId('global'), /reserved/i);
     assert.throws(() => sanitizeProjectId('system'), /reserved/i);
     assert.throws(() => sanitizeProjectId('admin'), /reserved/i);
     assert.throws(() => sanitizeProjectId('default'), /reserved/i);
   });
 
+  it('should accept "global" as the default fallback project ID', () => {
+    assert.strictEqual(sanitizeProjectId('global'), 'global');
+    assert.strictEqual(sanitizeProjectId('GLOBAL'), 'global');
+  });
+
   it('should reject reserved IDs case-insensitively', () => {
-    assert.throws(() => sanitizeProjectId('GLOBAL'), /reserved/i);
     assert.throws(() => sanitizeProjectId('System'), /reserved/i);
+    assert.throws(() => sanitizeProjectId('ADMIN'), /reserved/i);
   });
 
   it('should reject invalid patterns', () => {

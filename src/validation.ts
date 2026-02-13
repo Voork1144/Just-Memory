@@ -138,7 +138,7 @@ const PROJECT_ID_PATTERN = /^[a-z0-9_-]{1,64}$/;
  * Sanitize and validate a project ID string.
  * Returns the cleaned ID or throws if invalid after cleaning.
  */
-const RESERVED_PROJECT_IDS = new Set(['global', 'system', 'admin', 'default']);
+const RESERVED_PROJECT_IDS = new Set(['system', 'admin', 'default']);
 
 export function sanitizeProjectId(raw: string): string {
   const cleaned = raw.trim().toLowerCase();
