@@ -120,8 +120,9 @@ export async function semanticSearch(
         });
 
         if (results.length > 0) {
-          // Fetch full memory rows for the candidate IDs
-          const ids = results.map(r => r.id);
+          // Normalize IDs: Qdrant auto-formats hex strings as hyphenated UUIDs,
+          // but SQLite stores them without hyphens
+          const ids = results.map(r => r.id.replace(/-/g, ''));
           const placeholders = ids.map(() => '?').join(',');
           const rows = db.prepare(`
             SELECT * FROM memories
@@ -129,18 +130,17 @@ export async function semanticSearch(
             AND deleted_at IS NULL
           `).all(...ids) as MemoryRow[];
 
-          // Merge scores from VectorStore
-          const scoreMap = new Map(results.map(r => [r.id, r.score]));
+          // Merge scores — use normalized (hyphenless) IDs for lookup
+          const scoreMap = new Map(results.map(r => [r.id.replace(/-/g, ''), r.score]));
           return rows
             .map(m => ({ ...m, similarity: scoreMap.get(m.id) || 0 }))
-            .filter(m => m.similarity > 0.3 &&
+            .filter(m => m.similarity > 0.1 &&
               calculateRetention(m.last_accessed, m.strength) > 0.1 &&
               calculateEffectiveConfidence(m) >= confidenceThreshold)
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit * 2);
         }
-        // VectorStore returned nothing — empty result
-        return [];
+        // VectorStore returned nothing — fall through to SQLite scan
       }
     }
 
@@ -164,7 +164,7 @@ export async function semanticSearch(
           `).all(queryBuffer, projectId, ...candidateIds, limit * 2) as MemoryRowWithSimilarity[];
 
           return rows
-            .filter(m => m.similarity > 0.3 &&
+            .filter(m => m.similarity > 0.1 &&
               calculateRetention(m.last_accessed, m.strength) > 0.1 &&
               calculateEffectiveConfidence(m) >= confidenceThreshold)
             .map(m => ({ ...m, similarity: m.similarity }));
@@ -186,7 +186,7 @@ export async function semanticSearch(
     `).all(queryBuffer, projectId, limit * 2) as MemoryRowWithSimilarity[];
 
     return rows
-      .filter(m => m.similarity > 0.3 &&
+      .filter(m => m.similarity > 0.1 &&
         calculateRetention(m.last_accessed, m.strength) > 0.1 &&
         calculateEffectiveConfidence(m) >= confidenceThreshold)
       .map(m => ({ ...m, similarity: m.similarity }));

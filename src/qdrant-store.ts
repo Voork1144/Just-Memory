@@ -214,7 +214,7 @@ export class QdrantStore implements VectorStore {
     const results = await this._client.search(this.opts.collection, {
       vector: Array.from(query),
       limit,
-      score_threshold: 0.3,
+      score_threshold: 0.1,
       with_payload: false,
       filter: hasFilter ? qdrantFilter : undefined,
     });

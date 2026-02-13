@@ -10,10 +10,10 @@ import {
   safeParse,
   type ContradictionResult,
 } from './config.js';
-import { generateEmbedding } from './models.js';
+import { generateDocumentEmbedding } from './models.js';
 import { validateContent, validateTags, validateMemoryType, validateUnitRange } from './validation.js';
-import { EMBEDDING_DIM } from './config.js';
 import type { MemoryRow, MemoryIdContent, EdgeRowWithContent, MemorySummary } from './types.js';
+import type { VectorStore } from './vector-store.js';
 
 // ============================================================================
 // Retention & Strength
@@ -113,7 +113,7 @@ export async function storeMemory(
     adjustedConfidence = Math.max(0.1, confidence - contradictionPenalty);
   }
 
-  const embedding = await generateEmbedding(content);
+  const embedding = await generateDocumentEmbedding(content);
   const embeddingBuffer = embedding ? Buffer.from(new Uint8Array(embedding.buffer)) : null;
 
   if (!embeddingBuffer) {
@@ -161,41 +161,45 @@ export async function reembedOrphaned(
   db: Database.Database,
   projectId: string,
   limit = 50,
-  forceRebuild = false
+  forceRebuild = false,
+  vectorStore?: VectorStore
 ): Promise<number> {
-  const CORRECT_EMBEDDING_SIZE = EMBEDDING_DIM * 4;
   const query = forceRebuild
-    ? `SELECT id, content FROM memories
+    ? `SELECT id, content, project_id FROM memories
        WHERE deleted_at IS NULL
          AND (project_id = ? OR project_id = 'global')
-         AND (embedding IS NULL OR length(embedding) != ${CORRECT_EMBEDDING_SIZE})
        LIMIT ?`
-    : `SELECT id, content FROM memories
+    : `SELECT id, content, project_id FROM memories
        WHERE deleted_at IS NULL
          AND embedding IS NULL
          AND (project_id = ? OR project_id = 'global')
        LIMIT ?`;
 
-  const orphaned = db.prepare(query).all(projectId, limit) as MemoryIdContent[];
+  const orphaned = db.prepare(query).all(projectId, limit) as (MemoryIdContent & { project_id: string })[];
 
   if (orphaned.length === 0) return 0;
 
   // Phase 1: Generate all embeddings (async)
-  const updates: { id: string; embedding: Buffer }[] = [];
+  const updates: { id: string; embedding: Buffer; rawEmbedding: Float32Array; projectId: string }[] = [];
   for (const m of orphaned) {
     try {
-      const embedding = await generateEmbedding(m.content);
+      const embedding = await generateDocumentEmbedding(m.content);
       if (embedding) {
-        updates.push({ id: m.id, embedding: Buffer.from(new Uint8Array(embedding.buffer)) });
+        updates.push({
+          id: m.id,
+          embedding: Buffer.from(new Uint8Array(embedding.buffer)),
+          rawEmbedding: embedding,
+          projectId: m.project_id,
+        });
       }
     } catch (err: unknown) {
       console.error(`[Just-Memory] Re-embed failed for ${m.id}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  // Phase 2: Batch-write all updates in a single transaction
+  // Phase 2: Batch-write all updates in a single transaction (SQLite)
   if (updates.length > 0) {
-    const batchUpdate = db.transaction((items: { id: string; embedding: Buffer }[]) => {
+    const batchUpdate = db.transaction((items: typeof updates) => {
       const stmt = db.prepare('UPDATE memories SET embedding = ? WHERE id = ?');
       for (const item of items) {
         stmt.run(item.embedding, item.id);
@@ -203,6 +207,22 @@ export async function reembedOrphaned(
     });
     batchUpdate(updates);
     console.error(`[Just-Memory] Re-embedded ${updates.length}/${orphaned.length} orphaned memories`);
+
+    // Phase 3: Sync to VectorStore (Qdrant) if available
+    if (vectorStore && vectorStore.isReady()) {
+      try {
+        const synced = await vectorStore.upsertBatch(
+          updates.map(u => ({
+            id: u.id,
+            embedding: u.rawEmbedding,
+            metadata: { projectId: u.projectId, deleted: false },
+          }))
+        );
+        console.error(`[Just-Memory] Synced ${synced} embeddings to ${vectorStore.backend}`);
+      } catch (err: unknown) {
+        console.error(`[Just-Memory] VectorStore sync failed (SQLite still updated):`, err instanceof Error ? err.message : err);
+      }
+    }
   }
   return updates.length;
 }
@@ -284,7 +304,7 @@ export async function updateMemory(
     fields.push('content = ?');
     values.push(updates.content);
 
-    const embedding = await generateEmbedding(updates.content);
+    const embedding = await generateDocumentEmbedding(updates.content);
     if (embedding) {
       fields.push('embedding = ?');
       values.push(Buffer.from(new Uint8Array(embedding.buffer)));
