@@ -2,6 +2,13 @@
 
 All notable changes to Just-Memory are documented here.
 
+## [5.0.1] - 2026-02-12
+
+### Fixed
+- Fixed `Project ID "global" is reserved` error that broke `memory_briefing` and other tools when no project markers (`.git`, `package.json`, etc.) were detected — `'global'` is the system's own default fallback project and should not be in the reserved set
+
+---
+
 ## [5.0.0] - 2026-02-08
 
 ### Breaking Changes
