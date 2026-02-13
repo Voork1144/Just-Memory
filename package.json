@@ -1,6 +1,6 @@
 {
   "name": "just-memory",
-  "version": "5.0.1",
+  "version": "5.0.2",
   "description": "Focused MCP server for persistent memory capabilities - semantic search, knowledge graphs, and session context",
   "main": "dist/just-memory-v2.1.js",
   "types": "dist/just-memory-v2.1.d.ts",
