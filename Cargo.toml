@@ -1,0 +1,88 @@
+[package]
+name = "just-memory"
+version = "8.0.0"
+edition = "2024"
+description = "Persistent memory MCP server with hybrid retrieval, ML enrichment, and concept formation"
+license = "MIT"
+rust-version = "1.88"
+
+[dependencies]
+# MCP Protocol
+rmcp = { version = "1.1", features = ["server", "transport-io"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Database
+rusqlite = { version = "0.38", features = ["bundled", "functions", "vtab", "backup", "blob", "trace", "hooks", "limits", "load_extension", "serialize", "collation"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.32"
+rusqlite_migration = "2.4"
+
+# ML / NLP
+ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
+tokenizers = "0.22"
+ndarray = "0.16"
+
+# Vector search
+# lancedb = "0.26"  # Enable when needed — heavy dependency
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# HTTP (dashboard + Ollama client)
+axum = { version = "0.8", features = ["tokio"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# File watching (config hot-reload)
+notify = "8"
+
+# Code intelligence
+tree-sitter = "0.25"
+# tree-sitter grammars added as needed
+
+# Async utilities
+async-trait = "0.1"
+
+# System paths
+dirs = "6"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+anyhow = "1"
+rand = "0.9"
+dashmap = "6"
+parking_lot = "0.12"
+once_cell = "1"
+regex = "1"
+sha2 = "0.10"
+base64 = "0.22"
+ordered-float = { version = "5", features = ["serde"] }
+indexmap = { version = "2", features = ["serde"] }
+
+# Channels for event bus
+flume = "0.11"
+
+# Schema for tool definitions
+schemars = "1"
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
+assert_float_eq = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
